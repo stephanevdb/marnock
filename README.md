@@ -58,12 +58,9 @@ Grant local network / notification permission when prompted. Keep the window ope
 Needs **JDK 17**. On Apple Silicon with Homebrew:
 
 ```bash
-brew install openjdk@17   # already keg-only; Gradle is pointed at it via android/gradle.properties
+brew install openjdk@17
+export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
 ```
-
-JDK path used by this project:
-
-`/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home`
 
 ```bash
 cd android
@@ -71,9 +68,6 @@ cd android
 # sdk.dir=/Users/YOU/Library/Android/sdk
 # or Homebrew cmdline tools:
 # sdk.dir=/opt/homebrew/share/android-commandlinetools
-
-# Optional: export JAVA_HOME for this shell (gradle.properties already sets org.gradle.java.home)
-# source .java-env
 
 ./gradlew :app:assembleDebug
 ./gradlew :app:installDebug   # with a device/emulator attached
@@ -91,9 +85,14 @@ Enable **Notification access** from the in-app button. Grant SMS / phone / conta
 cd relay
 docker compose up -d --build
 # or: go run ./cmd/relay -addr :8787
+# or pull CI image: docker pull ghcr.io/<owner>/marnock-relay:latest
 ```
 
 On both apps, turn **off** “Local-only”, set the relay URL to `ws://YOUR_HOST:8787/ws`, and ensure devices are already paired (same session key). LAN is preferred when the peer is discoverable.
+
+### CI
+
+GitHub Actions (`.github/workflows/ci.yml`) builds the Android APK and macOS app on every PR/`main` push, and publishes the relay image to GHCR on `main` and `v*` tags.
 
 ## Features
 
