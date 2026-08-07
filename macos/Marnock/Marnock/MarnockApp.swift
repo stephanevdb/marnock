@@ -56,25 +56,15 @@ struct MarnockApp: App {
 
     @ViewBuilder
     private var menuBarIcon: some View {
+        Image(systemName: menuIconName)
+            .renderingMode(.template)
+    }
+
+    private var menuIconName: String {
         switch model.path {
-        case .offline:
-            // Phone with X / slash — disconnected
-            Image(systemName: "iphone.slash")
-        case .lan:
-            // Phone with Wi‑Fi — LAN
-            if #available(macOS 14.0, *) {
-                Image(systemName: "iphone.badge.wifi")
-            } else {
-                Image(systemName: "iphone.radiowaves.left.and.right")
-            }
-        case .relay:
-            // Phone with globe — internet relay
-            Image(systemName: "iphone")
-                .overlay(alignment: .bottomTrailing) {
-                    Image(systemName: "globe")
-                        .font(.system(size: 7, weight: .bold))
-                        .offset(x: 1, y: 1)
-                }
+        case .offline: return "iphone.slash"
+        case .lan: return "iphone.and.arrow.forward"
+        case .relay: return "network"
         }
     }
 }

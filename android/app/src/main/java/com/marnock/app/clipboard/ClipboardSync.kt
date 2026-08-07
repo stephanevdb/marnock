@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.SharedFlow
 /**
  * Watches local clipboard and applies remote updates with loop prevention.
  * On Android 10+, background reads return null — we briefly open
- * [ClipboardCaptureActivity] to obtain focus and re-read.
+ * [ClipboardCaptureActivity], then fall back to a tap notification if BAL blocks it.
  */
 class ClipboardSync(private val context: Context) {
     private val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -21,7 +21,9 @@ class ClipboardSync(private val context: Context) {
     @Volatile private var lastApplied = ""
     @Volatile private var enabled = false
     @Volatile private var listenerRegistered = false
-    @Volatile private var lastCaptureAt = 0L
+    @Volatile private var awaitingCapture = false
+    @Volatile private var captureGeneration = 0
+    @Volatile private var lastNotifAt = 0L
 
     private val _localChanges = MutableSharedFlow<String>(extraBufferCapacity = 8)
     val localChanges: SharedFlow<String> = _localChanges
@@ -34,11 +36,7 @@ class ClipboardSync(private val context: Context) {
             emitLocal(text)
             return@OnPrimaryClipChangedListener
         }
-        // Background: Android strips primaryClip — capture with a focused activity.
-        val now = SystemClock.elapsedRealtime()
-        if (now - lastCaptureAt < 1_200L) return@OnPrimaryClipChangedListener
-        lastCaptureAt = now
-        main.post { ClipboardCaptureActivity.start(context.applicationContext) }
+        requestBackgroundCapture()
     }
 
     fun setEnabled(value: Boolean) {
@@ -51,6 +49,8 @@ class ClipboardSync(private val context: Context) {
         } else if (listenerRegistered) {
             clipboard.removePrimaryClipChangedListener(listener)
             listenerRegistered = false
+            awaitingCapture = false
+            ClipboardCaptureNotifier.cancel(context)
         }
     }
 
@@ -62,6 +62,14 @@ class ClipboardSync(private val context: Context) {
         } catch (_: SecurityException) {
             null
         }
+    }
+
+    /** Call when a Marnock activity has focus — reads without needing capture UI. */
+    fun pollIfReadable() {
+        if (!enabled) return
+        if (System.currentTimeMillis() < suppressUntil) return
+        val text = currentText() ?: return
+        emitLocal(text)
     }
 
     fun applyRemote(text: String) {
@@ -82,12 +90,42 @@ class ClipboardSync(private val context: Context) {
             clipboard.removePrimaryClipChangedListener(listener)
             listenerRegistered = false
         }
+        awaitingCapture = false
+        ClipboardCaptureNotifier.cancel(context)
         active = null
+    }
+
+    private fun requestBackgroundCapture() {
+        if (awaitingCapture) return
+        awaitingCapture = true
+        val gen = ++captureGeneration
+        val started = ClipboardCaptureActivity.start(context.applicationContext)
+        if (!started) {
+            awaitingCapture = false
+            offerCaptureNotification()
+            return
+        }
+        // BAL often fails silently (no exception) — fall back if we never emitted.
+        main.postDelayed({
+            if (awaitingCapture && captureGeneration == gen) {
+                awaitingCapture = false
+                offerCaptureNotification()
+            }
+        }, 1_200)
+    }
+
+    private fun offerCaptureNotification() {
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastNotifAt < 2_500L) return
+        lastNotifAt = now
+        ClipboardCaptureNotifier.notify(context)
     }
 
     private fun emitLocal(text: String) {
         if (text == lastApplied) return
         lastApplied = text
+        awaitingCapture = false
+        ClipboardCaptureNotifier.cancel(context)
         _localChanges.tryEmit(text)
     }
 
@@ -105,6 +143,14 @@ class ClipboardSync(private val context: Context) {
             if (!sync.enabled) return
             if (System.currentTimeMillis() < sync.suppressUntil) return
             sync.emitLocal(text)
+        }
+
+        /** Capture activity finished without text — allow notification fallback. */
+        fun onCaptureFailed() {
+            val sync = active ?: return
+            if (!sync.awaitingCapture) return
+            sync.awaitingCapture = false
+            sync.offerCaptureNotification()
         }
     }
 

@@ -161,9 +161,12 @@ final class AppModel: ObservableObject {
         }
         server.onClientConnected = { [weak self] in
             Task { @MainActor in
-                self?.useRelay = false
-                self?.path = .lan
-                self?.status = "Phone connected over LAN"
+                guard let self else { return }
+                // LAN wins: drop any in-flight/open relay so a late onOpen cannot flip UI back.
+                self.useRelay = false
+                self.path = .lan
+                self.status = "Phone connected over LAN"
+                self.relayClient.close()
             }
         }
         server.onClientDisconnected = { [weak self] in
@@ -270,12 +273,15 @@ final class AppModel: ObservableObject {
     }
 
     private func connectRelay() {
+        guard path != .lan else { return }
         guard let url = URL(string: relayURL) else { return }
         useRelay = true
         status = "Connecting relay…"
         relayClient.onOpen = { [weak self] in
             Task { @MainActor in
                 guard let self, let key = self.crypto.sessionKeyData() else { return }
+                // Ignore late opens if LAN reclaimed the link (or relay was abandoned).
+                guard self.useRelay, self.path != .lan else { return }
                 self.path = .relay
                 self.status = "Connected (Relay)"
                 self.sendPlain(Envelope(type: MessageTypes.relayRegister, payload: [

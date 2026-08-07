@@ -36,10 +36,10 @@ final class ClipboardMonitor: @unchecked Sendable {
         // Always apply inbound clips when connected; `enabled` only gates Mac→phone outbound.
         if text == lastText { return }
         suppressUntil = Date().addingTimeInterval(0.75)
-        lastText = text
         let pb = NSPasteboard.general
         pb.clearContents()
-        pb.setString(text, forType: .string)
+        guard pb.setString(text, forType: .string) else { return }
+        lastText = text
         lastChangeCount = pb.changeCount
     }
 }

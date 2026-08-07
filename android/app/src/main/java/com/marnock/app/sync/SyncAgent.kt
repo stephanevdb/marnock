@@ -127,6 +127,12 @@ class SyncAgent(
         _path.value = ConnectionPath.Offline
     }
 
+    /** When UI is focused, re-read clipboard (Android 10+ allows reads with focus). */
+    fun pollClipboard() {
+        if (!started) return
+        clipboard.pollIfReadable()
+    }
+
     /** Pair by scanning Mac QR JSON. */
     fun pairFromQr(qrJson: String) {
         scope.launch {

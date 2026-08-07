@@ -7,6 +7,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.WindowManager
 
 /**
  * Briefly takes window focus so Android 10+ allows reading [ClipboardManager.primaryClip]
@@ -18,8 +19,9 @@ class ClipboardCaptureActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.addFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE)
         // Empty content; we only need window focus.
-        main.postDelayed({ finishCapture(null) }, 900)
+        main.postDelayed({ finishCapture(null) }, 1_200)
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -43,13 +45,16 @@ class ClipboardCaptureActivity : Activity() {
         main.removeCallbacksAndMessages(null)
         if (!text.isNullOrEmpty()) {
             ClipboardSync.emitCaptured(text)
+        } else {
+            ClipboardSync.onCaptureFailed()
         }
         finish()
         overridePendingTransition(0, 0)
     }
 
     companion object {
-        fun start(context: Context) {
+        /** @return false if [startActivity] threw (BAL / security). BAL may also fail silently. */
+        fun start(context: Context): Boolean {
             val i = Intent(context, ClipboardCaptureActivity::class.java).apply {
                 addFlags(
                     Intent.FLAG_ACTIVITY_NEW_TASK or
@@ -59,10 +64,11 @@ class ClipboardCaptureActivity : Activity() {
                         Intent.FLAG_ACTIVITY_SINGLE_TOP
                 )
             }
-            try {
+            return try {
                 context.startActivity(i)
+                true
             } catch (_: Exception) {
-                // Background activity starts may be blocked on some OS versions.
+                false
             }
         }
     }

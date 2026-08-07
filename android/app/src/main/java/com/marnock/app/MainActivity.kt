@@ -52,6 +52,11 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        (application as MarnockApp).agent.pollClipboard()
+    }
+
     private fun requestRuntimePermissions() {
         val needed = mutableListOf(
             Manifest.permission.CAMERA,
