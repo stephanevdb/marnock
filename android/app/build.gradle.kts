@@ -13,8 +13,10 @@ android {
         applicationId = "com.marnock.app"
         minSdk = 28
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = (System.getenv("VERSION_CODE") ?: "1").toInt()
+        versionName = System.getenv("VERSION_NAME") ?: "1.0.0"
+        buildConfigField("String", "UPDATE_REPO", "\"stephanevdb/mardock\"")
+        buildConfigField("String", "UPDATE_ASSET_ANDROID", "\"Marnock-android.apk\"")
     }
 
     buildTypes {
@@ -35,6 +37,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"

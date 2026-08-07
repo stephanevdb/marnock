@@ -91,7 +91,25 @@ On both apps, turn **off** “Local-only”, set the relay URL to `ws://YOUR_HOS
 
 ### CI
 
-GitHub Actions (`.github/workflows/ci.yml`) builds the Android APK and macOS app on every PR/`main` push, and publishes the relay image to GHCR on `main` and `v*` tags.
+GitHub Actions (`.github/workflows/ci.yml`) builds the Android APK and macOS app on every PR/`main` push, publishes the relay image to GHCR on `main` / `v*` tags, and on `v*` tags creates a **GitHub Release** with:
+
+- `Marnock-android.apk`
+- `Marnock-macos.zip`
+
+### Releasing & self-update
+
+Both apps check GitHub Releases for a newer version on launch, show a banner + system notification, and offer an **Update** button.
+
+```bash
+git tag v1.2.3
+git push origin v1.2.3
+# Wait for Actions → Release assets appear on GitHub
+```
+
+- Version comes from the tag (`v1.2.3` → `1.2.3`).
+- First install is still sideload / `adb install` / `./run.sh`; later updates use the in-app button.
+- Android may ask once to allow installs from Marnock.
+- Repo used for checks: `stephanevdb/mardock` (must be public, or clients need a token — not supported yet).
 
 ## Features
 

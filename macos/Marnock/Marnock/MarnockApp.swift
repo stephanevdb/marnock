@@ -5,14 +5,17 @@ import AppKit
 struct MarnockApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var model = AppModel()
+    @StateObject private var updates = UpdateModel()
 
     var body: some Scene {
         WindowGroup("Marnock") {
             ContentView()
                 .environmentObject(model)
+                .environmentObject(updates)
                 .onAppear {
                     model.start()
                     appDelegate.model = model
+                    updates.checkOnLaunch()
                 }
                 .onOpenURL { url in
                     model.handleShareURL(url)
@@ -26,6 +29,7 @@ struct MarnockApp: App {
         MenuBarExtra(menuTitle, systemImage: menuIcon) {
             MenuBarStatus()
                 .environmentObject(model)
+                .environmentObject(updates)
         }
         .menuBarExtraStyle(.window)
     }

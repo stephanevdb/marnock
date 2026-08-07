@@ -3,6 +3,7 @@ import AppKit
 
 struct MenuBarStatus: View {
     @EnvironmentObject var model: AppModel
+    @EnvironmentObject var updates: UpdateModel
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -13,6 +14,16 @@ struct MenuBarStatus: View {
             if model.deviceStatus.battery >= 0 {
                 Text("Battery \(model.deviceStatus.battery)%\(model.deviceStatus.charging ? " · charging" : "")")
                     .font(.caption)
+            }
+
+            if let update = updates.available, !updates.dismissed {
+                Divider()
+                Text("Update v\(update.version) available").font(.caption)
+                HStack {
+                    Button("Update") { updates.install() }
+                        .disabled(updates.installing)
+                    Button("Later") { updates.dismissed = true }
+                }
             }
 
             Divider()
@@ -38,6 +49,10 @@ struct MenuBarStatus: View {
             Toggle("Quiet hours", isOn: $model.quietHoursEnabled)
             Button("Refresh SMS") { model.refreshSmsThreads() }
             Button("Refresh calls") { model.refreshCallHistory() }
+            Button(updates.checking ? "Checking…" : "Check for updates") {
+                Task { await updates.check(notify: false) }
+            }
+            .disabled(updates.checking)
             if model.callState.state == "ringing" {
                 Button("Answer") { model.answerCall() }
                 Button("Reject") { model.rejectCall() }

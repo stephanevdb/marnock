@@ -41,6 +41,7 @@ import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.material.icons.outlined.QrCodeScanner
+import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.outlined.UploadFile
 import androidx.compose.material.icons.outlined.Wifi
 import androidx.compose.material.icons.outlined.WifiOff
@@ -61,22 +62,29 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.marnock.app.BuildConfig
 import com.marnock.app.MarnockApp
 import com.marnock.app.discovery.DiscoveredPeer
 import com.marnock.app.sync.ConnectionPath
 import com.marnock.app.ui.theme.MarnockExtra
+import com.marnock.app.update.ApkInstaller
+import com.marnock.app.update.AppUpdate
+import com.marnock.app.update.UpdateChecker
+import com.marnock.app.update.UpdateNotifier
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -109,6 +117,23 @@ fun HomeScreen(app: MarnockApp) {
         fine || nearby
     }
 
+    var availableUpdate by remember { mutableStateOf<AppUpdate?>(null) }
+    var updateDismissed by remember { mutableStateOf(false) }
+    var updating by remember { mutableStateOf(false) }
+    var updateError by remember { mutableStateOf<String?>(null) }
+    val installer = remember { ApkInstaller(context.applicationContext) }
+    val downloadProgress by installer.progress.collectAsState()
+
+    LaunchedEffect(Unit) {
+        runCatching { UpdateChecker().check() }
+            .onSuccess { update ->
+                availableUpdate = update
+                if (update != null) {
+                    UpdateNotifier.notify(context, update.version)
+                }
+            }
+    }
+
     if (scanning) {
         QrScanScreen(
             onResult = { qr ->
@@ -137,6 +162,76 @@ fun HomeScreen(app: MarnockApp) {
                 path = path,
                 paired = paired
             )
+
+            val update = availableUpdate
+            if (update != null && !updateDismissed) {
+                Spacer(modifier = Modifier.height(20.dp))
+                OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Outlined.SystemUpdate,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Update available",
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                                Text(
+                                    text = "v${update.version} (you have ${BuildConfig.VERSION_NAME})",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        if (updating && downloadProgress >= 0f) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            LinearProgressIndicator(
+                                progress = { downloadProgress.coerceIn(0f, 1f) },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                        if (updateError != null) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = updateError!!,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = {
+                                    scope.launch {
+                                        updateError = null
+                                        if (!installer.canRequestPackageInstalls()) {
+                                            installer.openInstallPermissionSettings()
+                                            updateError = "Allow installing apps from Marnock, then tap Update again"
+                                            return@launch
+                                        }
+                                        updating = true
+                                        val result = installer.downloadAndPromptInstall(update.downloadUrl)
+                                        updating = false
+                                        result.onFailure {
+                                            updateError = it.message ?: "Update failed"
+                                        }
+                                    }
+                                },
+                                enabled = !updating
+                            ) {
+                                Text(if (updating) "Downloading…" else "Update")
+                            }
+                            TextButton(onClick = { updateDismissed = true }) {
+                                Text("Later")
+                            }
+                        }
+                    }
+                }
+            }
 
             Spacer(modifier = Modifier.height(28.dp))
 

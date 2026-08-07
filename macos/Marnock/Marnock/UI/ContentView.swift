@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 
 struct ContentView: View {
     @EnvironmentObject var model: AppModel
+    @EnvironmentObject var updates: UpdateModel
     @State private var section: SidebarSection = .pairing
     @State private var smsBody = ""
     @State private var dialNumber = ""
@@ -33,6 +34,35 @@ struct ContentView: View {
             }
         }
         .frame(minWidth: 820, minHeight: 560)
+        .safeAreaInset(edge: .top) {
+            if let update = updates.available, !updates.dismissed {
+                updateBanner(update)
+            }
+        }
+    }
+
+    private func updateBanner(_ update: AppUpdateInfo) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: "arrow.down.app")
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Update available: v\(update.version)")
+                    .font(.headline)
+                Text("You have \(UpdateChecker.currentVersion)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            if updates.installing {
+                ProgressView(value: updates.progress)
+                    .frame(width: 100)
+            }
+            Button("Update") { updates.install() }
+                .disabled(updates.installing)
+            Button("Later") { updates.dismissed = true }
+                .buttonStyle(.borderless)
+        }
+        .padding(12)
+        .background(.ultraThinMaterial)
     }
 
     private var pairingView: some View {
@@ -418,6 +448,30 @@ struct ContentView: View {
     private var settingsView: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Settings").font(.title)
+            GroupBox("Updates") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Installed: \(UpdateChecker.currentVersion)")
+                    if let err = updates.errorMessage {
+                        Text(err).foregroundStyle(.red).font(.caption)
+                    } else if !updates.statusMessage.isEmpty {
+                        Text(updates.statusMessage).foregroundStyle(.secondary).font(.caption)
+                    }
+                    HStack {
+                        Button(updates.checking ? "Checking…" : "Check for updates") {
+                            Task { await updates.check(notify: false) }
+                        }
+                        .disabled(updates.checking || updates.installing)
+                        if updates.available != nil {
+                            Button("Update") { updates.install() }
+                                .disabled(updates.installing)
+                        }
+                    }
+                    if updates.installing {
+                        ProgressView(value: updates.progress)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
             GroupBox("Quiet hours") {
                 VStack(alignment: .leading, spacing: 8) {
                     Toggle("Pause notification mirroring when Mac is locked", isOn: $model.quietHoursEnabled)

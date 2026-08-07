@@ -15,8 +15,31 @@ permissions:
   contents: read
 
 jobs:
+  version:
+    name: Resolve version
+    runs-on: ubuntu-latest
+    outputs:
+      version_name: ${{ steps.v.outputs.version_name }}
+      version_code: ${{ steps.v.outputs.version_code }}
+    steps:
+      - id: v
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VER="${GITHUB_REF_NAME#v}"
+          else
+            VER="0.0.0-dev"
+          fi
+          IFS=. read -r MAJ MIN PAT <<<"${VER%%-*}"
+          MAJ=${MAJ:-0}; MIN=${MIN:-0}; PAT=${PAT:-0}
+          CODE=$((MAJ * 10000 + MIN * 100 + PAT))
+          if [[ "$CODE" -lt 1 ]]; then CODE=1; fi
+          echo "version_name=$VER" >> "$GITHUB_OUTPUT"
+          echo "version_code=$CODE" >> "$GITHUB_OUTPUT"
+          echo "Resolved version_name=$VER version_code=$CODE"
+
   android:
     name: Build Android
+    needs: version
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -34,17 +57,25 @@ jobs:
 
       - name: Assemble debug APK
         working-directory: android
+        env:
+          VERSION_NAME: ${{ needs.version.outputs.version_name }}
+          VERSION_CODE: ${{ needs.version.outputs.version_code }}
         run: ./gradlew :app:assembleDebug --stacktrace
+
+      - name: Rename APK for release
+        run: |
+          cp android/app/build/outputs/apk/debug/app-debug.apk Marnock-android.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: marnock-android-debug
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: marnock-android
+          path: Marnock-android.apk
           if-no-files-found: error
 
   macos:
     name: Build macOS
+    needs: version
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
@@ -55,12 +86,18 @@ jobs:
 
       - name: Package .app
         working-directory: macos/Marnock
+        env:
+          VERSION_NAME: ${{ needs.version.outputs.version_name }}
+          VERSION_CODE: ${{ needs.version.outputs.version_code }}
         run: |
           set -euo pipefail
           BIN="$(swift build -c release --show-bin-path)/Marnock"
           APP="Marnock.app"
           rm -rf "$APP"
           mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+          # Inject marketing + build version into Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${VERSION_NAME}" Marnock/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${VERSION_CODE}" Marnock/Info.plist
           cp Marnock/Info.plist "$APP/Contents/Info.plist"
           cp "$BIN" "$APP/Contents/MacOS/Marnock"
           chmod +x "$APP/Contents/MacOS/Marnock"
@@ -69,14 +106,49 @@ jobs:
           elif [ -f ../../branding/Marnock.icns ]; then
             cp ../../branding/Marnock.icns "$APP/Contents/Resources/AppIcon.icns"
           fi
+          if command -v codesign >/dev/null 2>&1; then
+            codesign --force --deep --sign - \
+              --entitlements Marnock/Marnock.entitlements \
+              "$APP" 2>/dev/null || codesign --force --deep --sign - "$APP"
+          fi
           ditto -c -k --sequesterRsrc --keepParent "$APP" Marnock-macos.zip
+          cp Marnock-macos.zip ../../Marnock-macos.zip
 
       - name: Upload macOS app
         uses: actions/upload-artifact@v4
         with:
           name: marnock-macos
-          path: macos/Marnock/Marnock-macos.zip
+          path: Marnock-macos.zip
           if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [version, android, macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: marnock-android
+          path: dist
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: marnock-macos
+          path: dist
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Marnock ${{ needs.version.outputs.version_name }}
+          generate_release_notes: true
+          files: |
+            dist/Marnock-android.apk
+            dist/Marnock-macos.zip
 
   relay-image:
     name: Build & publish relay image
@@ -124,5 +196,4 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          # Multi-arch on publish; single arch on PRs (faster smoke build).
           platforms: ${{ github.event_name != 'pull_request' && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
