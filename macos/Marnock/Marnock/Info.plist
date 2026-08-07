@@ -20,6 +20,8 @@
 	<string>1</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>13.0</string>
+	<key>LSUIElement</key>
+	<true/>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Marnock discovers and connects to your Android phone on the local network.</string>
 	<key>NSBonjourServices</key>

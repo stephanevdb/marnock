@@ -22,7 +22,7 @@ If an update shows **App not installed**, uninstall the old build once (early re
 
 ### Pair
 
-1. On the Mac, open Marnock — it shows a QR code + 6-digit code.
+1. On the Mac, launch Marnock (menu bar only — no Dock icon). Open the menu bar item → **Open Marnock…** → Home shows the QR + 6-digit code.
 2. On Android, tap **Scan Mac pairing QR**.
 3. Stay on the same Wi‑Fi (or turn off Local-only to use the relay).
 

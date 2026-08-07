@@ -8,15 +8,10 @@ struct MarnockApp: App {
     @StateObject private var updates = UpdateModel()
 
     var body: some Scene {
-        WindowGroup("Marnock") {
+        Window("Marnock", id: "main") {
             ContentView()
                 .environmentObject(model)
                 .environmentObject(updates)
-                .onAppear {
-                    model.start()
-                    appDelegate.model = model
-                    updates.checkOnLaunch()
-                }
                 .onOpenURL { url in
                     model.handleShareURL(url)
                 }
@@ -30,6 +25,14 @@ struct MarnockApp: App {
             MenuBarStatus()
                 .environmentObject(model)
                 .environmentObject(updates)
+                .onAppear {
+                    appDelegate.model = model
+                    if !appDelegate.didStartServices {
+                        appDelegate.didStartServices = true
+                        model.start()
+                        updates.checkOnLaunch()
+                    }
+                }
         }
         .menuBarExtraStyle(.window)
     }
@@ -52,6 +55,27 @@ struct MarnockApp: App {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     weak var model: AppModel?
+    var didStartServices = false
+    private var didSuppressLaunchWindow = false
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.setActivationPolicy(.accessory)
+        // The main Window scene may appear at launch; close only that titled window.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, !self.didSuppressLaunchWindow else { return }
+            self.didSuppressLaunchWindow = true
+            for window in NSApp.windows {
+                let isMain = window.title == "Marnock"
+                    || (window.identifier?.rawValue.contains("main") == true)
+                guard isMain, window.styleMask.contains(.titled) else { continue }
+                window.close()
+            }
+        }
+    }
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        false
+    }
 
     func application(_ application: NSApplication, open urls: [URL]) {
         for url in urls {
