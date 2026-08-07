@@ -118,6 +118,10 @@ GitHub Actions (`.github/workflows/ci.yml`) builds the Android APK and macOS app
 
 Both apps check GitHub Releases for a newer version on launch, show a banner + system notification, and offer an **Update** button.
 
+**One-click (recommended):** Actions → **Release** → Run workflow → choose `patch` / `minor` / `major`. That creates the next `v*` tag and dispatches CI to publish the GitHub Release + Homebrew bump.
+
+**Manual:**
+
 ```bash
 git tag v1.2.3
 git push origin v1.2.3

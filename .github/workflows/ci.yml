@@ -6,6 +6,8 @@ on:
     tags: ["v*"]
   pull_request:
     branches: [main]
+  # Used by Release workflow: GITHUB_TOKEN tag pushes do not re-trigger this file.
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}

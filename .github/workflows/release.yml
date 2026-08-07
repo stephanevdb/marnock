@@ -1,0 +1,70 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Semver bump
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+        default: patch
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  tag:
+    name: Bump and tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute next version, push tag, and run CI
+        env:
+          BUMP: ${{ inputs.bump }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          LATEST="$(git tag -l 'v*' --sort=-v:refname | head -n1 || true)"
+          if [[ -z "$LATEST" ]]; then
+            MAJ=0; MIN=0; PAT=0
+          else
+            VER="${LATEST#v}"
+            VER="${VER%%-*}"
+            IFS=. read -r MAJ MIN PAT <<<"$VER"
+            MAJ=${MAJ:-0}; MIN=${MIN:-0}; PAT=${PAT:-0}
+          fi
+
+          case "$BUMP" in
+            major) MAJ=$((MAJ + 1)); MIN=0; PAT=0 ;;
+            minor) MIN=$((MIN + 1)); PAT=0 ;;
+            patch) PAT=$((PAT + 1)) ;;
+            *) echo "Unknown bump: $BUMP"; exit 1 ;;
+          esac
+
+          NEXT="v${MAJ}.${MIN}.${PAT}"
+          echo "Latest=${LATEST:-<none>} bump=${BUMP} → ${NEXT}"
+
+          if git rev-parse -q --verify "refs/tags/${NEXT}" >/dev/null; then
+            echo "Tag ${NEXT} already exists"
+            exit 1
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$NEXT" -m "Release ${NEXT}"
+          git push origin "refs/tags/${NEXT}"
+          echo "Pushed ${NEXT}"
+
+          # Tag pushes with GITHUB_TOKEN do not trigger other workflows; dispatch CI
+          # on the new tag so the existing release pipeline runs.
+          gh workflow run ci.yml --ref "$NEXT"
+          echo "Dispatched CI for ${NEXT}"
