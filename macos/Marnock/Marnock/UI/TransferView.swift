@@ -84,7 +84,10 @@ struct TransferView: View {
                         ProgressView(value: Double(t.bytesDone), total: Double(t.bytesTotal))
                             .frame(width: 120)
                     }
-                    if t.status == "sending" || t.status == "receiving" || t.status == "offering" {
+                    if t.status == "awaiting" {
+                        Button("Accept") { model.fileTransfer.acceptIncoming(t.id) }
+                        Button("Reject", role: .destructive) { model.fileTransfer.rejectIncoming(t.id) }
+                    } else if t.status == "sending" || t.status == "receiving" || t.status == "offering" {
                         Button("Cancel") { model.fileTransfer.cancel(t.id) }
                     }
                 }

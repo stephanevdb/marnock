@@ -4,7 +4,9 @@ import AppKit
 struct MenuBarStatus: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var updates: UpdateModel
+    @EnvironmentObject var navigation: NavigationState
     @Environment(\.openWindow) private var openWindow
+    @State private var replyDrafts: [String: String] = [:]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -49,7 +51,7 @@ struct MenuBarStatus: View {
             }
 
             Button("Open Marnock…") {
-                openMainWindow()
+                openMainWindow(section: nil)
             }
             .keyboardShortcut("o")
 
@@ -121,9 +123,7 @@ struct MenuBarStatus: View {
                     .lineLimit(1)
             }
             HStack(spacing: 16) {
-                Button {
-                    model.mediaCommand("previous")
-                } label: {
+                Button { model.mediaCommand("previous") } label: {
                     Image(systemName: "backward.fill")
                 }
                 .buttonStyle(.borderless)
@@ -133,9 +133,7 @@ struct MenuBarStatus: View {
                     Image(systemName: model.mediaState.playing ? "pause.fill" : "play.fill")
                 }
                 .buttonStyle(.borderless)
-                Button {
-                    model.mediaCommand("next")
-                } label: {
+                Button { model.mediaCommand("next") } label: {
                     Image(systemName: "forward.fill")
                 }
                 .buttonStyle(.borderless)
@@ -157,15 +155,47 @@ struct MenuBarStatus: View {
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(Array(model.notifications.prefix(3))) { n in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(n.title.isEmpty ? n.packageName : n.title)
-                            .font(.caption.weight(.medium))
-                            .lineLimit(1)
-                        if !n.text.isEmpty {
-                            Text(n.text)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(2)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Button {
+                            openMainWindow(section: .notifications)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(n.title.isEmpty ? n.packageName : n.title)
+                                    .font(.caption.weight(.medium))
+                                    .lineLimit(1)
+                                if !n.text.isEmpty {
+                                    Text(n.text)
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(2)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .buttonStyle(.plain)
+
+                        if let replyAction = n.actions.first(where: \.allowsReply) {
+                            HStack {
+                                TextField(
+                                    "Reply",
+                                    text: Binding(
+                                        get: { replyDrafts[n.id] ?? "" },
+                                        set: { replyDrafts[n.id] = $0 }
+                                    )
+                                )
+                                .textFieldStyle(.roundedBorder)
+                                Button("Send") {
+                                    let text = replyDrafts[n.id] ?? ""
+                                    guard !text.isEmpty else { return }
+                                    model.invokeNotificationAction(
+                                        key: n.id,
+                                        actionId: replyAction.id,
+                                        reply: text
+                                    )
+                                    replyDrafts[n.id] = ""
+                                }
+                                .disabled((replyDrafts[n.id] ?? "").isEmpty)
+                            }
                         }
                     }
                     .padding(.vertical, 2)
@@ -174,10 +204,12 @@ struct MenuBarStatus: View {
         }
     }
 
-    private func openMainWindow() {
+    private func openMainWindow(section: SidebarSection?) {
+        if let section {
+            navigation.section = section
+        }
         NSApp.activate(ignoringOtherApps: true)
         openWindow(id: "main")
-        // Ensure the window is key after SwiftUI creates/restores it.
         DispatchQueue.main.async {
             if let window = NSApp.windows.first(where: { $0.identifier?.rawValue.contains("main") == true })
                 ?? NSApp.windows.first(where: { $0.isVisible && $0.canBecomeKey }) {

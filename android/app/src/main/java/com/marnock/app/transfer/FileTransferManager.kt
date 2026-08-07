@@ -3,7 +3,6 @@ package com.marnock.app.transfer
 import android.content.Context
 import android.os.Environment
 import android.util.Base64
-import android.util.Log
 import com.marnock.app.protocol.Envelope
 import com.marnock.app.protocol.MessageTypes
 import com.marnock.app.protocol.bool
@@ -39,6 +38,8 @@ class FileTransferManager(
     private val send: (Envelope) -> Unit
 ) {
     private val incoming = ConcurrentHashMap<String, Incoming>()
+    private val pendingIn = ConcurrentHashMap<String, PendingOffer>()
+    private val pendingOut = ConcurrentHashMap<String, File>()
     private val _progress = MutableStateFlow<List<TransferProgress>>(emptyList())
     val progress: StateFlow<List<TransferProgress>> = _progress
 
@@ -65,7 +66,35 @@ class FileTransferManager(
         }
     }
 
-    private val pendingOut = ConcurrentHashMap<String, File>()
+    fun acceptIncoming(id: String) {
+        val offer = pendingIn.remove(id) ?: return
+        val dest = File(downloadsDir(), sanitize(offer.name))
+        incoming[id] = Incoming(dest, offer.size, offer.sha, FileOutputStream(dest))
+        upsert(TransferProgress(id, dest.name, "in", 0, offer.size, "receiving"))
+        send(
+            Envelope(
+                MessageTypes.FILE_ACCEPT,
+                payload = buildJsonObject {
+                    put("transferId", id)
+                    put("ok", true)
+                }
+            )
+        )
+    }
+
+    fun rejectIncoming(id: String) {
+        val offer = pendingIn.remove(id) ?: return
+        upsert(TransferProgress(id, offer.name, "in", 0, offer.size, "rejected"))
+        send(
+            Envelope(
+                MessageTypes.FILE_ACCEPT,
+                payload = buildJsonObject {
+                    put("transferId", id)
+                    put("ok", false)
+                }
+            )
+        )
+    }
 
     fun handle(env: Envelope) {
         when (env.type) {
@@ -73,26 +102,15 @@ class FileTransferManager(
                 val id = env.payload.str("transferId")
                 val name = env.payload.str("name")
                 val size = env.payload.long("size")
-                val mime = env.payload.str("mime").ifEmpty { "application/octet-stream" }
                 val sha = env.payload.str("sha256")
-                val dest = File(downloadsDir(), sanitize(name))
-                incoming[id] = Incoming(dest, size, sha, FileOutputStream(dest))
-                upsert(TransferProgress(id, dest.name, "in", 0, size, "receiving"))
-                send(
-                    Envelope(
-                        MessageTypes.FILE_ACCEPT,
-                        payload = buildJsonObject {
-                            put("transferId", id)
-                            put("ok", true)
-                        }
-                    )
-                )
+                pendingIn[id] = PendingOffer(sanitize(name), size, sha)
+                upsert(TransferProgress(id, sanitize(name), "in", 0, size, "awaiting"))
             }
             MessageTypes.FILE_ACCEPT -> {
                 val id = env.payload.str("transferId")
-                val ok = env.payload.bool("ok") || env.payload.str("ok") == "true"
+                val ok = env.payload.bool("ok")
                 val file = pendingOut.remove(id) ?: return
-                if (!ok && env.payload.str("ok").isNotEmpty()) {
+                if (!ok) {
                     upsert(TransferProgress(id, file.name, "out", 0, file.length(), "rejected"))
                     return
                 }
@@ -128,6 +146,7 @@ class FileTransferManager(
                 val id = env.payload.str("transferId")
                 incoming.remove(id)?.out?.close()
                 pendingOut.remove(id)
+                pendingIn.remove(id)
                 upsert(TransferProgress(id, id, "?", 0, 0, "cancelled"))
             }
         }
@@ -181,6 +200,7 @@ class FileTransferManager(
     fun cancel(id: String) {
         incoming.remove(id)?.out?.close()
         pendingOut.remove(id)
+        pendingIn.remove(id)
         send(
             Envelope(
                 MessageTypes.FILE_CANCEL,
@@ -206,6 +226,8 @@ class FileTransferManager(
         }
         return md.digest().joinToString("") { "%02x".format(it) }
     }
+
+    private data class PendingOffer(val name: String, val size: Long, val sha: String)
 
     private data class Incoming(
         val file: File,

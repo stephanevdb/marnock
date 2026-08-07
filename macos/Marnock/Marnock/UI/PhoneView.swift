@@ -62,19 +62,15 @@ struct PhoneView: View {
 
                 GroupBox("Wi‑Fi share") {
                     VStack(alignment: .leading, spacing: 8) {
+                        Text("SSID only — Android apps cannot read the Wi‑Fi password.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                         Button("Request from phone") { model.requestWifiInfo() }
                         if !model.wifiInfo.ssid.isEmpty {
                             Text("SSID: \(model.wifiInfo.ssid)")
                             Button("Copy SSID") {
                                 NSPasteboard.general.clearContents()
                                 NSPasteboard.general.setString(model.wifiInfo.ssid, forType: .string)
-                            }
-                        }
-                        if model.wifiInfo.hasPassword, !model.wifiInfo.password.isEmpty {
-                            SecureField("Password", text: .constant(model.wifiInfo.password))
-                            Button("Copy password") {
-                                NSPasteboard.general.clearContents()
-                                NSPasteboard.general.setString(model.wifiInfo.password, forType: .string)
                             }
                         }
                         if !model.wifiInfo.note.isEmpty {

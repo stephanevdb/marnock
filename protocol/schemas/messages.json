@@ -152,6 +152,134 @@
         "ciphertext": { "type": "string" },
         "fromDeviceId": { "type": "string" }
       }
+    },
+    "FileOffer": {
+      "type": "object",
+      "required": ["transferId", "name", "size"],
+      "properties": {
+        "transferId": { "type": "string" },
+        "name": { "type": "string" },
+        "size": { "type": "integer" },
+        "mime": { "type": "string" },
+        "sha256": { "type": "string" }
+      }
+    },
+    "FileAccept": {
+      "type": "object",
+      "required": ["transferId", "ok"],
+      "properties": {
+        "transferId": { "type": "string" },
+        "ok": { "type": "boolean" }
+      }
+    },
+    "FileChunk": {
+      "type": "object",
+      "required": ["transferId", "offset", "data"],
+      "properties": {
+        "transferId": { "type": "string" },
+        "offset": { "type": "integer" },
+        "data": { "type": "string", "description": "base64 chunk" }
+      }
+    },
+    "FileComplete": {
+      "type": "object",
+      "required": ["transferId"],
+      "properties": {
+        "transferId": { "type": "string" },
+        "ok": { "type": "boolean" }
+      }
+    },
+    "FileCancel": {
+      "type": "object",
+      "required": ["transferId"],
+      "properties": { "transferId": { "type": "string" } }
+    },
+    "MediaCommand": {
+      "type": "object",
+      "required": ["command"],
+      "properties": {
+        "command": { "enum": ["play", "pause", "next", "previous", "volume"] },
+        "level": { "type": "integer" }
+      }
+    },
+    "MediaState": {
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "artist": { "type": "string" },
+        "playing": { "type": "boolean" },
+        "volume": { "type": "integer" }
+      }
+    },
+    "FindRing": {
+      "type": "object",
+      "properties": { "durationSec": { "type": "integer" } }
+    },
+    "FindStop": {
+      "type": "object",
+      "properties": {}
+    },
+    "DeviceStatus": {
+      "type": "object",
+      "properties": {
+        "battery": { "type": "integer" },
+        "charging": { "type": "boolean" },
+        "wifiSsid": { "type": "string" },
+        "cellular": { "type": "boolean" },
+        "hotspotActive": { "type": "boolean" }
+      }
+    },
+    "LinkOpen": {
+      "type": "object",
+      "required": ["url"],
+      "properties": {
+        "url": { "type": "string" },
+        "originDeviceId": { "type": "string" }
+      }
+    },
+    "WifiRequest": {
+      "type": "object",
+      "properties": {}
+    },
+    "WifiInfo": {
+      "type": "object",
+      "properties": {
+        "ssid": { "type": "string" },
+        "hasPassword": { "type": "boolean" },
+        "password": { "type": "string" },
+        "note": { "type": "string" }
+      }
+    },
+    "PhotosListRequest": {
+      "type": "object",
+      "properties": { "limit": { "type": "integer" } }
+    },
+    "PhotosList": {
+      "type": "object",
+      "required": ["photos"],
+      "properties": {
+        "photos": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "name": { "type": "string" },
+              "thumbB64": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "PhotosGet": {
+      "type": "object",
+      "required": ["id"],
+      "properties": { "id": { "type": "string" } }
+    },
+    "PrefsQuiet": {
+      "type": "object",
+      "required": ["enabled"],
+      "properties": { "enabled": { "type": "boolean" } }
     }
   }
 }

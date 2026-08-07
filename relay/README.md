@@ -2,6 +2,17 @@
 
 Minimal Go WebSocket relay. Routes opaque `{ toDeviceId, ciphertext }` blobs between registered devices. No payload inspection.
 
+### Auth
+
+Clients must `relay.register` with a non-empty `authToken` (apps send `hex(sessionKey[0:16])` for the pair). The hub:
+
+- Rejects register without `authToken`
+- Rejects reclaiming an existing `deviceId` unless the token matches (including after disconnect — sticky binding)
+- Only forwards between peers that registered with the **same** token
+- Requires `fromDeviceId` to match the registered connection
+
+Unpaired or mismatched-token clients cannot steal a device slot or inject into a pair.
+
 ## Run locally
 
 ```bash

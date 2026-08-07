@@ -4,11 +4,26 @@ struct SettingsView: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var updates: UpdateModel
     @State private var denyPackageDraft = ""
+    @State private var launchTick = 0
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 SectionHeader(title: "Settings", subtitle: "Clipboard, relay, quiet hours, and updates")
+
+                GroupBox("General") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Toggle("Open at login", isOn: Binding(
+                            get: { LaunchAtLogin.isEnabled },
+                            set: { _ = LaunchAtLogin.setEnabled($0); launchTick += 1 }
+                        ))
+                        Text(LaunchAtLogin.statusDescription)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .id(launchTick)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
 
                 GroupBox("Clipboard") {
                     VStack(alignment: .leading, spacing: 8) {

@@ -55,6 +55,8 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -121,6 +123,7 @@ fun HomeScreen(app: MarnockApp) {
     var updateDismissed by remember { mutableStateOf(false) }
     var updating by remember { mutableStateOf(false) }
     var updateError by remember { mutableStateOf<String?>(null) }
+    var tab by remember { mutableStateOf(AndroidTab.Home) }
     val installer = remember { ApkInstaller(context.applicationContext) }
     val downloadProgress by installer.progress.collectAsState()
 
@@ -147,7 +150,35 @@ fun HomeScreen(app: MarnockApp) {
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
-        contentColor = MaterialTheme.colorScheme.onSurface
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        bottomBar = {
+            NavigationBar {
+                NavigationBarItem(
+                    selected = tab == AndroidTab.Home,
+                    onClick = { tab = AndroidTab.Home },
+                    icon = { Icon(Icons.Outlined.LaptopMac, contentDescription = "Home") },
+                    label = { Text("Home") }
+                )
+                NavigationBarItem(
+                    selected = tab == AndroidTab.Phone,
+                    onClick = { tab = AndroidTab.Phone },
+                    icon = { Icon(Icons.Outlined.PhoneAndroid, contentDescription = "Phone") },
+                    label = { Text("Phone") }
+                )
+                NavigationBarItem(
+                    selected = tab == AndroidTab.Transfer,
+                    onClick = { tab = AndroidTab.Transfer },
+                    icon = { Icon(Icons.Outlined.UploadFile, contentDescription = "Transfer") },
+                    label = { Text("Transfer") }
+                )
+                NavigationBarItem(
+                    selected = tab == AndroidTab.Settings,
+                    onClick = { tab = AndroidTab.Settings },
+                    icon = { Icon(Icons.Outlined.Notifications, contentDescription = "Settings") },
+                    label = { Text("Settings") }
+                )
+            }
+        }
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -155,324 +186,344 @@ fun HomeScreen(app: MarnockApp) {
                 .padding(innerPadding)
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp)
-                .padding(top = 20.dp, bottom = 40.dp)
+                .padding(top = 20.dp, bottom = 24.dp)
         ) {
-            BrandHero(
-                status = status,
-                path = path,
-                paired = paired
-            )
-
-            val update = availableUpdate
-            if (update != null && !updateDismissed) {
-                Spacer(modifier = Modifier.height(20.dp))
-                OutlinedCard(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Outlined.SystemUpdate,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Update available",
-                                    style = MaterialTheme.typography.titleMedium
-                                )
-                                Text(
-                                    text = "v${update.version} (you have ${BuildConfig.VERSION_NAME})",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+            when (tab) {
+                AndroidTab.Home -> {
+                    BrandHero(status = status, path = path, paired = paired)
+                    UpdateCard(
+                        availableUpdate = availableUpdate,
+                        updateDismissed = updateDismissed,
+                        updating = updating,
+                        updateError = updateError,
+                        downloadProgress = downloadProgress,
+                        onUpdate = {
+                            scope.launch {
+                                val update = availableUpdate ?: return@launch
+                                updateError = null
+                                if (!installer.canRequestPackageInstalls()) {
+                                    installer.openInstallPermissionSettings()
+                                    updateError = "Allow installing apps from Marnock, then tap Update again"
+                                    return@launch
+                                }
+                                updating = true
+                                val result = installer.downloadAndPromptInstall(update.downloadUrl)
+                                updating = false
+                                result.onFailure {
+                                    updateError = it.message ?: "Update failed"
+                                }
                             }
-                        }
-                        if (updating && downloadProgress >= 0f) {
-                            Spacer(modifier = Modifier.height(12.dp))
-                            LinearProgressIndicator(
-                                progress = { downloadProgress.coerceIn(0f, 1f) },
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-                        if (updateError != null) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = updateError!!,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.error
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(
-                                onClick = {
-                                    scope.launch {
-                                        updateError = null
-                                        if (!installer.canRequestPackageInstalls()) {
-                                            installer.openInstallPermissionSettings()
-                                            updateError = "Allow installing apps from Marnock, then tap Update again"
-                                            return@launch
-                                        }
-                                        updating = true
-                                        val result = installer.downloadAndPromptInstall(update.downloadUrl)
-                                        updating = false
-                                        result.onFailure {
-                                            updateError = it.message ?: "Update failed"
-                                        }
-                                    }
-                                },
-                                enabled = !updating
-                            ) {
-                                Text(if (updating) "Downloading…" else "Update")
-                            }
-                            TextButton(onClick = { updateDismissed = true }) {
-                                Text("Later")
-                            }
-                        }
-                    }
+                        },
+                        onLater = { updateDismissed = true }
+                    )
+                    Spacer(modifier = Modifier.height(28.dp))
+                    PairingAction(paired = paired, onScan = { scanning = true })
+                    Spacer(modifier = Modifier.height(28.dp))
+                    SectionLabel("Nearby Macs")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = if (peers.isEmpty()) {
+                            "None yet — keep the Mac app open on the same Wi‑Fi."
+                        } else {
+                            "Tap a Mac to connect over LAN."
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    PeerList(peers = peers, onConnect = { app.agent.connectToPeer(it) })
                 }
-            }
-
-            Spacer(modifier = Modifier.height(28.dp))
-
-            PairingAction(
-                paired = paired,
-                onScan = { scanning = true }
-            )
-
-            Spacer(modifier = Modifier.height(32.dp))
-
-            SectionLabel("Sync")
-            Spacer(modifier = Modifier.height(8.dp))
-            OutlinedCard(modifier = Modifier.fillMaxWidth()) {
-                SettingToggle(
-                    headline = "Clipboard",
-                    supporting = if (lastClip.isBlank()) {
-                        "Mirror text between phone and Mac"
+                AndroidTab.Phone -> {
+                    SectionLabel("Phone")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    if (findRinging) {
+                        OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                            ListItem(
+                                headlineContent = {
+                                    Text("Find My Phone is ringing", style = MaterialTheme.typography.titleMedium)
+                                },
+                                supportingContent = {
+                                    Text("Stop the alert from here or the Mac.", style = MaterialTheme.typography.bodyMedium)
+                                },
+                                leadingContent = {
+                                    Icon(
+                                        imageVector = Icons.Outlined.PhoneAndroid,
+                                        contentDescription = "Find phone",
+                                        tint = MaterialTheme.colorScheme.error
+                                    )
+                                },
+                                trailingContent = {
+                                    TextButton(onClick = { app.agent.stopFindRing() }) { Text("Stop") }
+                                },
+                                colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
                     } else {
-                        "Last: ${lastClip.take(48)}${if (lastClip.length > 48) "…" else ""}"
-                    },
-                    icon = Icons.Outlined.ContentCopy,
-                    checked = clipboardOn,
-                    onCheckedChange = { scope.launch { app.settings.setClipboardEnabled(it) } }
-                )
-                HorizontalDivider()
-                AccessRow(
-                    headline = "Notification access",
-                    supporting = "Needed to mirror alerts to your Mac",
-                    icon = Icons.Outlined.Notifications,
-                    actionLabel = "Open",
-                    onClick = {
-                        // Must use Activity context — Application.startActivity crashes without NEW_TASK
-                        context.startActivity(
-                            Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+                        Text(
+                            text = "Use Find phone from the Mac menu bar when this device is misplaced.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
+                    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                        AccessRow(
+                            headline = "Wi‑Fi name access",
+                            supporting = if (wifiPermOk) {
+                                "Location must stay on for Android to expose the SSID (password is never shared)"
+                            } else {
+                                "Grant Location / Nearby devices so Mac can show your Wi‑Fi name"
+                            },
+                            icon = Icons.Outlined.Wifi,
+                            actionLabel = if (wifiPermOk) "Location" else "Grant",
+                            onClick = {
+                                if (!wifiPermOk) {
+                                    val perms = buildList {
+                                        add(Manifest.permission.ACCESS_FINE_LOCATION)
+                                        add(Manifest.permission.ACCESS_COARSE_LOCATION)
+                                        if (Build.VERSION.SDK_INT >= 33) {
+                                            add(Manifest.permission.NEARBY_WIFI_DEVICES)
+                                        }
+                                    }.toTypedArray()
+                                    wifiPermLauncher.launch(perms)
+                                } else {
+                                    context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+                                }
+                            }
                         )
                     }
-                )
-                HorizontalDivider()
-                AccessRow(
-                    headline = "Wi‑Fi name access",
-                    supporting = if (wifiPermOk) {
-                        "Location must stay on for Android to expose the SSID"
+                }
+                AndroidTab.Transfer -> {
+                    SectionLabel("Transfers")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    if (transfers.isEmpty()) {
+                        Text(
+                            text = "Incoming and outgoing files appear here. Accept offers before they start.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     } else {
-                        "Grant Location / Nearby devices so Mac can show your Wi‑Fi name"
-                    },
-                    icon = Icons.Outlined.Wifi,
-                    actionLabel = if (wifiPermOk) "Location" else "Grant",
-                    onClick = {
-                        if (!wifiPermOk) {
-                            val perms = buildList {
-                                add(Manifest.permission.ACCESS_FINE_LOCATION)
-                                add(Manifest.permission.ACCESS_COARSE_LOCATION)
-                                if (Build.VERSION.SDK_INT >= 33) {
-                                    add(Manifest.permission.NEARBY_WIFI_DEVICES)
+                        OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                            transfers.takeLast(8).forEachIndexed { index, t ->
+                                if (index > 0) HorizontalDivider()
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Text(
+                                        text = t.name,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = "${t.direction} · ${t.status}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    if (t.bytesTotal > 0L) {
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        LinearProgressIndicator(
+                                            progress = { (t.bytesDone.toFloat() / t.bytesTotal.toFloat()).coerceIn(0f, 1f) },
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                    }
+                                    if (t.status == "awaiting") {
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            Button(onClick = { app.agent.acceptTransfer(t.id) }) { Text("Accept") }
+                                            TextButton(onClick = { app.agent.rejectTransfer(t.id) }) { Text("Reject") }
+                                        }
+                                    } else if (t.status == "sending" || t.status == "receiving" || t.status == "offering") {
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        TextButton(onClick = { app.agent.cancelTransfer(t.id) }) { Text("Cancel") }
+                                    }
                                 }
-                            }.toTypedArray()
-                            wifiPermLauncher.launch(perms)
-                        } else {
-                            context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+                            }
                         }
                     }
-                )
-            }
-
-            if (findRinging) {
-                Spacer(modifier = Modifier.height(20.dp))
-                OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                    Spacer(modifier = Modifier.height(28.dp))
+                    SectionLabel("Share")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Use Android Share → Marnock to send files or open links on your Mac. " +
+                            "Photos and large files use LAN only.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
                     ListItem(
-                        headlineContent = {
-                            Text("Find My Phone is ringing", style = MaterialTheme.typography.titleMedium)
-                        },
+                        headlineContent = { Text("Share target ready", style = MaterialTheme.typography.titleMedium) },
                         supportingContent = {
-                            Text("Stop the alert from here or the Mac.", style = MaterialTheme.typography.bodyMedium)
+                            Text("Files save to Downloads/Marnock on either device", style = MaterialTheme.typography.bodyMedium)
                         },
                         leadingContent = {
                             Icon(
-                                imageVector = Icons.Outlined.PhoneAndroid,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.error
+                                imageVector = Icons.Outlined.UploadFile,
+                                contentDescription = "Share",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         },
-                        trailingContent = {
-                            TextButton(onClick = { app.agent.stopFindRing() }) { Text("Stop") }
-                        },
-                        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface)
+                        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest)
                     )
                 }
-            }
-
-            if (transfers.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(28.dp))
-                SectionLabel("Transfers")
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedCard(modifier = Modifier.fillMaxWidth()) {
-                    transfers.takeLast(5).forEachIndexed { index, t ->
-                        if (index > 0) HorizontalDivider()
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Text(
-                                text = t.name,
-                                style = MaterialTheme.typography.titleSmall,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                text = "${t.direction} · ${t.status}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            if (t.bytesTotal > 0L) {
-                                Spacer(modifier = Modifier.height(8.dp))
-                                LinearProgressIndicator(
-                                    progress = { (t.bytesDone.toFloat() / t.bytesTotal.toFloat()).coerceIn(0f, 1f) },
-                                    modifier = Modifier.fillMaxWidth()
+                AndroidTab.Settings -> {
+                    SectionLabel("Sync")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                        SettingToggle(
+                            headline = "Clipboard",
+                            supporting = if (lastClip.isBlank()) {
+                                "Mirror text between phone and Mac"
+                            } else {
+                                "Last: ${lastClip.take(48)}${if (lastClip.length > 48) "…" else ""}"
+                            },
+                            icon = Icons.Outlined.ContentCopy,
+                            checked = clipboardOn,
+                            onCheckedChange = { scope.launch { app.settings.setClipboardEnabled(it) } }
+                        )
+                        HorizontalDivider()
+                        AccessRow(
+                            headline = "Notification access",
+                            supporting = "Needed to mirror alerts to your Mac",
+                            icon = Icons.Outlined.Notifications,
+                            actionLabel = "Open",
+                            onClick = {
+                                context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                            }
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(28.dp))
+                    SectionLabel("Connection")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                        SettingToggle(
+                            headline = "Local-only",
+                            supporting = "Prefer LAN and skip the relay",
+                            icon = Icons.Outlined.Wifi,
+                            checked = localOnly,
+                            onCheckedChange = { scope.launch { app.settings.setLocalOnly(it) } }
+                        )
+                        HorizontalDivider()
+                        ListItem(
+                            headlineContent = {
+                                Text(
+                                    text = if (showRelay) "Hide relay URL" else "Relay URL",
+                                    style = MaterialTheme.typography.titleMedium
                                 )
+                            },
+                            supportingContent = {
+                                Text(
+                                    text = "Optional internet path when away from home",
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            },
+                            leadingContent = {
+                                Icon(
+                                    imageVector = Icons.Outlined.Link,
+                                    contentDescription = "Relay",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            },
+                            trailingContent = {
+                                TextButton(onClick = { showRelay = !showRelay }) {
+                                    Text(if (showRelay) "Hide" else "Edit")
+                                }
+                            },
+                            colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface)
+                        )
+                    }
+                    AnimatedVisibility(
+                        visible = showRelay,
+                        enter = fadeIn() + slideInVertically { it / 3 },
+                        exit = fadeOut()
+                    ) {
+                        Column(modifier = Modifier.padding(top = 12.dp)) {
+                            OutlinedTextField(
+                                value = relayUrl,
+                                onValueChange = { relayUrl = it },
+                                label = { Text("WebSocket URL") },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                shape = MaterialTheme.shapes.medium
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Button(
+                                onClick = { scope.launch { app.settings.setRelayUrl(relayUrl) } },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
+                            ) {
+                                Text("Save relay URL")
                             }
                         }
                     }
+                    Spacer(modifier = Modifier.height(28.dp))
+                    Text(
+                        text = "SMS, phone, contacts, photos, nearby Wi‑Fi, and notification access are needed for full sync. " +
+                            "Call audio stays on this phone or its Bluetooth headset.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
+        }
+    }
+}
 
-            Spacer(modifier = Modifier.height(28.dp))
+private enum class AndroidTab { Home, Phone, Transfer, Settings }
 
-            SectionLabel("Nearby Macs")
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = if (peers.isEmpty()) {
-                    "None yet — keep the Mac app open on the same Wi‑Fi."
-                } else {
-                    "Tap a Mac to connect over LAN."
-                },
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+@Composable
+private fun UpdateCard(
+    availableUpdate: AppUpdate?,
+    updateDismissed: Boolean,
+    updating: Boolean,
+    updateError: String?,
+    downloadProgress: Float,
+    onUpdate: () -> Unit,
+    onLater: () -> Unit
+) {
+    val update = availableUpdate
+    if (update == null || updateDismissed) return
+    Spacer(modifier = Modifier.height(20.dp))
+    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Outlined.SystemUpdate,
+                    contentDescription = "Update",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(text = "Update available", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        text = "v${update.version} (you have ${BuildConfig.VERSION_NAME})",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            if (updating && downloadProgress >= 0f) {
+                Spacer(modifier = Modifier.height(12.dp))
+                LinearProgressIndicator(
+                    progress = { downloadProgress.coerceIn(0f, 1f) },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+            if (updateError != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = updateError,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
             Spacer(modifier = Modifier.height(12.dp))
-            PeerList(
-                peers = peers,
-                onConnect = { app.agent.connectToPeer(it) }
-            )
-
-            Spacer(modifier = Modifier.height(28.dp))
-
-            SectionLabel("Connection")
-            Spacer(modifier = Modifier.height(8.dp))
-            OutlinedCard(modifier = Modifier.fillMaxWidth()) {
-                SettingToggle(
-                    headline = "Local-only",
-                    supporting = "Prefer LAN and skip the relay",
-                    icon = Icons.Outlined.Wifi,
-                    checked = localOnly,
-                    onCheckedChange = { scope.launch { app.settings.setLocalOnly(it) } }
-                )
-                HorizontalDivider()
-                ListItem(
-                    headlineContent = {
-                        Text(
-                            text = if (showRelay) "Hide relay URL" else "Relay URL",
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                    },
-                    supportingContent = {
-                        Text(
-                            text = "Optional internet path when away from home",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    },
-                    leadingContent = {
-                        Icon(
-                            imageVector = Icons.Outlined.Link,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    },
-                    trailingContent = {
-                        TextButton(onClick = { showRelay = !showRelay }) {
-                            Text(if (showRelay) "Hide" else "Edit")
-                        }
-                    },
-                    colors = ListItemDefaults.colors(
-                        containerColor = MaterialTheme.colorScheme.surface
-                    )
-                )
-            }
-
-            AnimatedVisibility(
-                visible = showRelay,
-                enter = fadeIn() + slideInVertically { it / 3 },
-                exit = fadeOut()
-            ) {
-                Column(modifier = Modifier.padding(top = 12.dp)) {
-                    OutlinedTextField(
-                        value = relayUrl,
-                        onValueChange = { relayUrl = it },
-                        label = { Text("WebSocket URL") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        shape = MaterialTheme.shapes.medium
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Button(
-                        onClick = { scope.launch { app.settings.setRelayUrl(relayUrl) } },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 48.dp)
-                    ) {
-                        Text("Save relay URL")
-                    }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onUpdate, enabled = !updating) {
+                    Text(if (updating) "Downloading…" else "Update")
                 }
+                TextButton(onClick = onLater) { Text("Later") }
             }
-
-            Spacer(modifier = Modifier.height(28.dp))
-            SectionLabel("Share")
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "Use Android Share → Marnock to send files or open links on your Mac. " +
-                    "Photos and large files use LAN only.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            ListItem(
-                headlineContent = { Text("Share target ready", style = MaterialTheme.typography.titleMedium) },
-                supportingContent = {
-                    Text("Files save to Downloads/Marnock on either device", style = MaterialTheme.typography.bodyMedium)
-                },
-                leadingContent = {
-                    Icon(
-                        imageVector = Icons.Outlined.UploadFile,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                },
-                colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest)
-            )
-
-            Spacer(modifier = Modifier.height(28.dp))
-            Text(
-                text = "SMS, phone, contacts, photos, nearby Wi‑Fi, and notification access are needed for full sync. " +
-                    "Call audio stays on this phone or its Bluetooth headset.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
         }
     }
 }

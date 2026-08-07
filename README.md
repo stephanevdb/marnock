@@ -147,16 +147,34 @@ git push origin v1.2.3
 | Feature | Notes |
 |--------|--------|
 | Clipboard | Bidirectional text; off until enabled; loop suppression |
-| Notifications | Android `NotificationListenerService` → Mac mirror + actions/reply |
+| Notifications | Android → Mac mirror; in-app + banner actions/reply |
 | SMS | Threads / messages sync, live receive, send from Mac |
 | Calls | State + history; dial / answer / reject (control only) |
-| Relay | Device-id routing of opaque blobs; no payload inspection |
+| Files | LAN chunked transfer; Accept/Reject before receive |
+| Photos | Browse phone camera roll from Mac; save over LAN |
+| Find phone | Ring / stop from Mac menu bar or Home |
+| Media | Play/pause/next + volume when a session is reported |
+| Wi‑Fi name | SSID (+ note) only — apps cannot read the password |
+| Quiet hours | Pause mirroring when Mac is locked (or force quiet) |
+| Menu bar | Accessory app (no Dock); Open Marnock… for full window |
+| Relay | Opaque blob routing; register requires matching pair `authToken` |
 
 **Call audio:** use a Bluetooth headset paired to the phone. The Mac only controls the call.
 
 ## Security defaults
 
 - Pairing required before sync
+- Session secrets in Keychain (Mac) / EncryptedSharedPreferences (Android)
 - Clipboard sync off by default
 - Local-only mode on by default (relay disabled)
-- Relay never sees plaintext
+- Relay never sees plaintext; routing identity bound by pair token
+
+### Optional macOS notarization (CI)
+
+For Gatekeeper-friendly releases, set GitHub Actions secrets:
+
+- `APPLE_CERTIFICATE_P12_BASE64`, `APPLE_CERTIFICATE_PASSWORD`
+- `APPLE_API_KEY`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER`
+- Optional: `APPLE_SIGNING_IDENTITY` (defaults to `Developer ID Application`)
+
+Without them, CI still ships an ad-hoc signed `.app`.

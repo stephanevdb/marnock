@@ -1,6 +1,6 @@
 import AppKit
 import Foundation
-import UserNotifications
+@preconcurrency import UserNotifications
 import Combine
 import Darwin
 
@@ -129,22 +129,24 @@ final class AppModel: ObservableObject {
         quietHoursForce = UserDefaults.standard.bool(forKey: "quietHoursForce")
         deniedNotificationPackages = Set(UserDefaults.standard.stringArray(forKey: "deniedNotifPackages") ?? [])
         wireFeatureServices()
+        KeychainStore.migrateFromUserDefaultsIfNeeded()
 
-        if let priv = UserDefaults.standard.string(forKey: "priv"),
-           let pub = UserDefaults.standard.string(forKey: "pub"),
+        let pub = UserDefaults.standard.string(forKey: "pub")
+        if let priv = KeychainStore.get(.identityPriv),
+           let pub,
            let eng = try? CryptoEngine(privateKeyB64: priv, publicKeyB64: pub) {
             crypto = eng
             deviceId = UserDefaults.standard.string(forKey: "deviceId") ?? UUID().uuidString
         } else {
             crypto = CryptoEngine()
             deviceId = UUID().uuidString
-            UserDefaults.standard.set(crypto.privateKeyB64, forKey: "priv")
+            KeychainStore.set(crypto.privateKeyB64, account: .identityPriv)
             UserDefaults.standard.set(crypto.publicKeyB64, forKey: "pub")
             UserDefaults.standard.set(deviceId, forKey: "deviceId")
         }
 
         if let peer = UserDefaults.standard.string(forKey: "peerDeviceId"),
-           let session = UserDefaults.standard.string(forKey: "sessionKey"),
+           let session = KeychainStore.get(.pairingSessionKey),
            let data = Data(base64Encoded: session) {
             pairedPeerId = peer
             crypto.setSessionKey(data)
@@ -218,6 +220,8 @@ final class AppModel: ObservableObject {
     }
 
     /// `swift run` launches a bare executable; UserNotifications asserts without an .app bundle id.
+    static var canUseUserNotificationsPublic: Bool { canUseUserNotifications }
+
     private static var canUseUserNotifications: Bool {
         guard let id = Bundle.main.bundleIdentifier, !id.isEmpty else { return false }
         return Bundle.main.bundleURL.pathExtension == "app"
@@ -359,6 +363,9 @@ final class AppModel: ObservableObject {
         case MessageTypes.notificationRemoved:
             if let key = env.payload["key"]?.stringValue {
                 notifications.removeAll { $0.id == key }
+                if Self.canUseUserNotifications {
+                    UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [key])
+                }
             }
         case MessageTypes.smsThreads:
             if let arr = env.payload["threads"]?.value as? [Any] {
@@ -446,8 +453,8 @@ final class AppModel: ObservableObject {
             pairedPeerId = peerId
             if let key = crypto.sessionKeyData() {
                 UserDefaults.standard.set(peerId, forKey: "peerDeviceId")
-                UserDefaults.standard.set(key.base64EncodedString(), forKey: "sessionKey")
-                UserDefaults.standard.set(peerPub, forKey: "peerPub")
+                KeychainStore.set(key.base64EncodedString(), account: .pairingSessionKey)
+                KeychainStore.set(peerPub, account: .pairingPeerPub)
             }
             sessionReady = true
             sendPlain(Envelope(type: MessageTypes.pairComplete, payload: [
@@ -464,13 +471,47 @@ final class AppModel: ObservableObject {
 
     private func postSystemNotification(_ n: MirroredNotification) {
         guard Self.canUseUserNotifications else { return }
-        let content = UNMutableNotificationContent()
-        content.title = n.title.isEmpty ? n.packageName : n.title
-        content.body = n.text
-        content.userInfo = ["key": n.id]
-        UNUserNotificationCenter.current().add(
-            UNNotificationRequest(identifier: n.id, content: content, trigger: nil)
+        let categoryId = "marnock.mirror.\(n.id)"
+        var unActions: [UNNotificationAction] = []
+        for (idx, action) in n.actions.prefix(3).enumerated() {
+            if action.allowsReply {
+                unActions.append(UNTextInputNotificationAction(
+                    identifier: action.id.isEmpty ? "reply-\(idx)" : action.id,
+                    title: action.title.isEmpty ? "Reply" : action.title,
+                    options: [],
+                    textInputButtonTitle: "Send",
+                    textInputPlaceholder: "Reply"
+                ))
+            } else {
+                unActions.append(UNNotificationAction(
+                    identifier: action.id.isEmpty ? "action-\(idx)" : action.id,
+                    title: action.title.isEmpty ? "Action" : action.title,
+                    options: []
+                ))
+            }
+        }
+        let category = UNNotificationCategory(
+            identifier: categoryId,
+            actions: unActions,
+            intentIdentifiers: [],
+            options: []
         )
+        UNUserNotificationCenter.current().getNotificationCategories { existing in
+            var next = existing
+            next.insert(category)
+            UNUserNotificationCenter.current().setNotificationCategories(next)
+            let content = UNMutableNotificationContent()
+            content.title = n.title.isEmpty ? n.packageName : n.title
+            content.body = n.text
+            content.categoryIdentifier = categoryId
+            content.userInfo = [
+                "key": n.id,
+                "packageName": n.packageName
+            ]
+            UNUserNotificationCenter.current().add(
+                UNNotificationRequest(identifier: n.id, content: content, trigger: nil)
+            )
+        }
     }
 
     func sendApp(_ env: Envelope) {
@@ -557,6 +598,9 @@ final class AppModel: ObservableObject {
     func clearPairing() {
         UserDefaults.standard.removeObject(forKey: "peerDeviceId")
         UserDefaults.standard.removeObject(forKey: "sessionKey")
+        UserDefaults.standard.removeObject(forKey: "peerPub")
+        KeychainStore.delete(.pairingSessionKey)
+        KeychainStore.delete(.pairingPeerPub)
         pairedPeerId = nil
         sessionReady = false
         pairingCode = String(format: "%06d", Int.random(in: 0...999999))

@@ -3,11 +3,11 @@ import SwiftUI
 struct ContentView: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var updates: UpdateModel
-    @State private var section: SidebarSection = .home
+    @EnvironmentObject var navigation: NavigationState
 
     var body: some View {
         NavigationSplitView {
-            List(SidebarSection.allCases, selection: $section) { item in
+            List(SidebarSection.allCases, selection: $navigation.section) { item in
                 Label(item.title, systemImage: item.icon)
                     .tag(item)
             }
@@ -25,7 +25,7 @@ struct ContentView: View {
                 .padding(12)
             }
         } detail: {
-            switch section {
+            switch navigation.section {
             case .home: HomeView()
             case .messages: MessagesView()
             case .calls: CallsView()

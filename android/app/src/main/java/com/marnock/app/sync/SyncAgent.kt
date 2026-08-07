@@ -504,6 +504,18 @@ class SyncAgent(
     private val emptyTransfers = MutableStateFlow(emptyList<com.marnock.app.transfer.TransferProgress>())
     fun transferProgress() = if (::files.isInitialized) files.progress else emptyTransfers
 
+    fun acceptTransfer(id: String) {
+        if (::files.isInitialized) files.acceptIncoming(id)
+    }
+
+    fun rejectTransfer(id: String) {
+        if (::files.isInitialized) files.rejectIncoming(id)
+    }
+
+    fun cancelTransfer(id: String) {
+        if (::files.isInitialized) files.cancel(id)
+    }
+
     fun sendFileToPeer(path: String, mime: String = "application/octet-stream") {
         if (::files.isInitialized) files.offerFile(path, mime)
     }

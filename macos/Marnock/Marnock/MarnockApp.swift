@@ -1,17 +1,20 @@
 import SwiftUI
 import AppKit
+import UserNotifications
 
 @main
 struct MarnockApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var model = AppModel()
     @StateObject private var updates = UpdateModel()
+    @StateObject private var navigation = NavigationState()
 
     var body: some Scene {
         Window("Marnock", id: "main") {
             ContentView()
                 .environmentObject(model)
                 .environmentObject(updates)
+                .environmentObject(navigation)
                 .onOpenURL { url in
                     model.handleShareURL(url)
                 }
@@ -25,6 +28,7 @@ struct MarnockApp: App {
             MenuBarStatus()
                 .environmentObject(model)
                 .environmentObject(updates)
+                .environmentObject(navigation)
                 .onAppear {
                     appDelegate.model = model
                     if !appDelegate.didStartServices {
@@ -53,14 +57,16 @@ struct MarnockApp: App {
     }
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     weak var model: AppModel?
     var didStartServices = false
     private var didSuppressLaunchWindow = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
-        // The main Window scene may appear at launch; close only that titled window.
+        if AppModel.canUseUserNotificationsPublic {
+            UNUserNotificationCenter.current().delegate = self
+        }
         DispatchQueue.main.async { [weak self] in
             guard let self, !self.didSuppressLaunchWindow else { return }
             self.didSuppressLaunchWindow = true
@@ -85,5 +91,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 model?.handleShareURL(url)
             }
         }
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let info = response.notification.request.content.userInfo
+        let key = info["key"] as? String ?? response.notification.request.identifier
+        let actionId = response.actionIdentifier
+        if actionId != UNNotificationDefaultActionIdentifier,
+           actionId != UNNotificationDismissActionIdentifier {
+            let reply = (response as? UNTextInputNotificationResponse)?.userText
+            Task { @MainActor in
+                model?.invokeNotificationAction(key: key, actionId: actionId, reply: reply)
+            }
+        }
+        completionHandler()
     }
 }
