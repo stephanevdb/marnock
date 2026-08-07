@@ -2,6 +2,28 @@
 
 Sync clipboard, notifications, SMS, and call control between Android and macOS over local Wi‑Fi (preferred), with an optional E2E-encrypted internet relay.
 
+## Quick start
+
+### macOS (Homebrew)
+
+```bash
+brew tap stephanevdb/marnock https://github.com/stephanevdb/marnock
+brew install --cask marnock
+open /Applications/Marnock.app
+```
+
+### Android (APK)
+
+1. Download [`Marnock-android.apk`](https://github.com/stephanevdb/marnock/releases/latest) from the latest GitHub Release.
+2. Open the APK on your phone and allow install from that source if prompted.
+3. Launch **Marnock**, grant notification / SMS / phone permissions as needed.
+
+### Pair
+
+1. On the Mac, open Marnock — it shows a QR code + 6-digit code.
+2. On Android, tap **Scan Mac pairing QR**.
+3. Stay on the same Wi‑Fi (or turn off Local-only to use the relay).
+
 ## Layout
 
 ```
@@ -20,27 +42,12 @@ After pairing, application messages are wrapped in `session.frame` and encrypted
 
 Discovery service type: `_marnock._tcp`.
 
-## Pairing
+## Homebrew details
 
-1. Start the macOS app — it shows a QR code + 6-digit pairing code.
-2. On Android, tap **Scan Mac pairing QR**.
-3. Devices exchange public keys, derive a session key, and store pairing locally.
-
-## Install (macOS via Homebrew)
-
-```bash
-brew tap stephanevdb/marnock https://github.com/stephanevdb/marnock
-brew trust --formula stephanevdb/marnock/marnock
-brew trust --cask stephanevdb/marnock/marnock
-
-brew install marnock                 # build from source (needs Xcode 15+)
-# brew install --cask marnock        # binary from GitHub Releases → /Applications
-```
-
-- **Formula** (`brew install marnock`): builds `Marnock.app` into the Cellar. Run `brew caveats marnock` for an optional `/Applications` symlink.
-- **Cask** (`brew install --cask marnock`): installs the prebuilt `Marnock-macos.zip` from GitHub Releases into `/Applications` (available after a `v*` release has been published).
-
-Tagged releases bump the Homebrew formula/cask version + checksums on `main` automatically.
+- **Cask** (`brew install --cask marnock`): prebuilt app from GitHub Releases → `/Applications` (see Quick start).
+- **Formula** (`brew install marnock`): builds from source (Xcode 15+). Run `brew caveats marnock` for an optional `/Applications` symlink.
+- Untapped formulas may need: `brew trust --formula stephanevdb/marnock/marnock` and `brew trust --cask stephanevdb/marnock/marnock`.
+- Tagged releases bump formula/cask version + checksums on `main` automatically.
 
 ## Build & run
 
