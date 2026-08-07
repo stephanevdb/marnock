@@ -87,7 +87,7 @@ docker compose up -d   # pulls ghcr.io/stephanevdb/marnock-relay:latest
 # or: go run ./cmd/relay -addr :8787
 ```
 
-On both apps, turn **off** “Local-only”, set the relay URL to `ws://YOUR_HOST:8787/ws`, and ensure devices are already paired (same session key). LAN is preferred when the peer is discoverable.
+On both apps, turn **off** “Local-only” to use the default relay (`wss://mardock.stephanevdb.com/ws`), and ensure devices are already paired (same session key). LAN is preferred when the peer is discoverable.
 
 ### CI
 

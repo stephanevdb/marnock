@@ -19,8 +19,8 @@ docker compose pull
 docker compose up -d
 ```
 
-- Health: `GET http://HOST:8787/healthz`
-- WebSocket: `ws://HOST:8787/ws`
+- Health: `GET /` or `GET /healthz` → `ok`
+- WebSocket: `ws://HOST:8787/ws` (or `wss://mardock.stephanevdb.com/ws` via Pangolin)
 
 Change the published port with `RELAY_PORT=8787 docker compose up -d`.
 

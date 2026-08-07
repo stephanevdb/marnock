@@ -99,7 +99,7 @@ fun HomeScreen(app: MarnockApp) {
     val localOnly by app.settings.localOnlyFlow.collectAsState(initial = true)
     val paired by app.settings.pairedFlow.collectAsState(initial = false)
     var scanning by remember { mutableStateOf(false) }
-    var relayUrl by remember { mutableStateOf("ws://127.0.0.1:8787/ws") }
+    var relayUrl by remember { mutableStateOf(com.marnock.app.data.AppSettings.DEFAULT_RELAY_URL) }
     var showRelay by remember { mutableStateOf(false) }
     val peers by app.agent.discoveredPeers().collectAsState()
     val transfers by app.agent.transferProgress().collectAsState()

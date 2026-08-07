@@ -51,15 +51,19 @@ final class UpdateModel: ObservableObject {
         installing = true
         errorMessage = nil
         progress = 0
-        Task {
+        let downloadURL = update.downloadURL
+        Task { [weak self] in
+            guard let self else { return }
             do {
-                try await AppUpdater.downloadAndInstall(from: update.downloadURL) { [weak self] p in
-                    Task { @MainActor in self?.progress = p }
+                try await AppUpdater.downloadAndInstall(from: downloadURL) { p in
+                    Task { @MainActor [weak self] in
+                        self?.progress = p
+                    }
                 }
             } catch {
-                await MainActor.run {
-                    installing = false
-                    errorMessage = error.localizedDescription
+                await MainActor.run { [weak self] in
+                    self?.installing = false
+                    self?.errorMessage = error.localizedDescription
                 }
             }
         }

@@ -49,7 +49,7 @@ class AppSettings(private val context: Context) {
                 it[privKey] = priv!!
                 it[pubKey] = pub!!
                 it[displayName] = android.os.Build.MODEL
-                it[relayUrl] = "ws://127.0.0.1:8787/ws"
+                it[relayUrl] = DEFAULT_RELAY_URL
             }
         }
         return Identity(
@@ -100,7 +100,7 @@ class AppSettings(private val context: Context) {
     }
 
     suspend fun relayUrl(): String =
-        context.dataStore.data.first()[relayUrl] ?: "ws://127.0.0.1:8787/ws"
+        context.dataStore.data.first()[relayUrl] ?: DEFAULT_RELAY_URL
 
     suspend fun isLocalOnly(): Boolean =
         context.dataStore.data.first()[localOnly] ?: true
@@ -120,4 +120,8 @@ class AppSettings(private val context: Context) {
         val peerPublicKeyB64: String,
         val sessionKeyB64: String
     )
+
+    companion object {
+        const val DEFAULT_RELAY_URL = "wss://mardock.stephanevdb.com/ws"
+    }
 }
