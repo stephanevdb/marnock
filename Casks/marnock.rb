@@ -1,7 +1,7 @@
 cask "marnock" do
-  version "1.1.1"
+  version "1.2.0"
   # Pinned by CI on each v* GitHub Release (`scripts/update-homebrew-cask.sh`).
-  sha256 "e7d91a6666cb12b8093daa32a667912b819069da9a2359616f5d763e2fedc7c4"
+  sha256 "97f6882a6430e86e9bf6615756134cc8929de6cf939557b8b7bcc44c84a3f0cd"
 
   url "https://github.com/stephanevdb/marnock/releases/download/v#{version}/Marnock-macos.zip"
   name "Marnock"
