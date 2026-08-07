@@ -1,0 +1,157 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://marnock.local/schemas/messages.json",
+  "title": "MarnockMessages",
+  "definitions": {
+    "PairHello": {
+      "type": "object",
+      "required": ["deviceId", "publicKey", "pairingCode", "displayName", "platform"],
+      "properties": {
+        "deviceId": { "type": "string" },
+        "publicKey": { "type": "string", "description": "base64 X25519 public key" },
+        "pairingCode": { "type": "string" },
+        "displayName": { "type": "string" },
+        "platform": { "enum": ["android", "macos"] }
+      }
+    },
+    "PairComplete": {
+      "type": "object",
+      "required": ["deviceId", "ok"],
+      "properties": {
+        "deviceId": { "type": "string" },
+        "ok": { "type": "boolean" }
+      }
+    },
+    "SessionFrame": {
+      "type": "object",
+      "required": ["nonce", "ciphertext"],
+      "properties": {
+        "nonce": { "type": "string" },
+        "ciphertext": { "type": "string" }
+      }
+    },
+    "ClipboardSet": {
+      "type": "object",
+      "required": ["text", "originDeviceId", "ts"],
+      "properties": {
+        "text": { "type": "string" },
+        "originDeviceId": { "type": "string" },
+        "ts": { "type": "integer" }
+      }
+    },
+    "NotificationPosted": {
+      "type": "object",
+      "required": ["key", "packageName", "title", "text", "ts"],
+      "properties": {
+        "key": { "type": "string" },
+        "packageName": { "type": "string" },
+        "title": { "type": "string" },
+        "text": { "type": "string" },
+        "ts": { "type": "integer" },
+        "actions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "title"],
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" },
+              "allowsReply": { "type": "boolean" }
+            }
+          }
+        }
+      }
+    },
+    "NotificationRemoved": {
+      "type": "object",
+      "required": ["key"],
+      "properties": { "key": { "type": "string" } }
+    },
+    "NotificationAction": {
+      "type": "object",
+      "required": ["key", "actionId"],
+      "properties": {
+        "key": { "type": "string" },
+        "actionId": { "type": "string" },
+        "replyText": { "type": "string" }
+      }
+    },
+    "SmsThread": {
+      "type": "object",
+      "required": ["threadId", "address", "snippet", "date"],
+      "properties": {
+        "threadId": { "type": "string" },
+        "address": { "type": "string" },
+        "contactName": { "type": "string" },
+        "snippet": { "type": "string" },
+        "date": { "type": "integer" },
+        "unread": { "type": "integer" }
+      }
+    },
+    "SmsMessage": {
+      "type": "object",
+      "required": ["id", "threadId", "address", "body", "date", "type"],
+      "properties": {
+        "id": { "type": "string" },
+        "threadId": { "type": "string" },
+        "address": { "type": "string" },
+        "body": { "type": "string" },
+        "date": { "type": "integer" },
+        "type": { "enum": ["inbox", "sent", "draft", "other"] }
+      }
+    },
+    "SmsSend": {
+      "type": "object",
+      "required": ["address", "body", "requestId"],
+      "properties": {
+        "address": { "type": "string" },
+        "body": { "type": "string" },
+        "requestId": { "type": "string" }
+      }
+    },
+    "CallState": {
+      "type": "object",
+      "required": ["state", "ts"],
+      "properties": {
+        "state": { "enum": ["idle", "ringing", "offhook", "dialing"] },
+        "number": { "type": "string" },
+        "name": { "type": "string" },
+        "ts": { "type": "integer" }
+      }
+    },
+    "CallHistoryEntry": {
+      "type": "object",
+      "required": ["id", "number", "date", "duration", "type"],
+      "properties": {
+        "id": { "type": "string" },
+        "number": { "type": "string" },
+        "name": { "type": "string" },
+        "date": { "type": "integer" },
+        "duration": { "type": "integer" },
+        "type": { "enum": ["incoming", "outgoing", "missed", "rejected", "other"] }
+      }
+    },
+    "CallDial": {
+      "type": "object",
+      "required": ["number"],
+      "properties": { "number": { "type": "string" } }
+    },
+    "RelayRegister": {
+      "type": "object",
+      "required": ["deviceId", "authToken"],
+      "properties": {
+        "deviceId": { "type": "string" },
+        "authToken": { "type": "string" }
+      }
+    },
+    "RelayForward": {
+      "type": "object",
+      "required": ["toDeviceId", "ciphertext"],
+      "properties": {
+        "toDeviceId": { "type": "string" },
+        "ciphertext": { "type": "string" },
+        "fromDeviceId": { "type": "string" }
+      }
+    }
+  }
+}

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Marnock</string>
+    <string name="sync_channel_name">Sync service</string>
+    <string name="sync_notification_title">Marnock</string>
+    <string name="sync_notification_text">Keeping Mac in sync</string>
+</resources>

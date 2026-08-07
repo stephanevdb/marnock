@@ -1,0 +1,53 @@
+package com.marnock.protocol
+
+/**
+ * Shared protocol message type constants (hand-maintained mirror of schemas/).
+ * Keep in sync with messages.swift and app MessageTypes.
+ */
+object MessageTypes {
+    const val PAIR_HELLO = "pair.hello"
+    const val PAIR_COMPLETE = "pair.complete"
+    const val PING = "ping"
+    const val PONG = "pong"
+    const val SESSION_FRAME = "session.frame"
+    const val CLIPBOARD_SET = "clipboard.set"
+    const val CLIPBOARD_CHANGED = "clipboard.changed"
+    const val NOTIFICATION_POSTED = "notification.posted"
+    const val NOTIFICATION_REMOVED = "notification.removed"
+    const val NOTIFICATION_ACTION = "notification.action"
+    const val SMS_THREADS = "sms.threads"
+    const val SMS_MESSAGES = "sms.messages"
+    const val SMS_SEND = "sms.send"
+    const val SMS_RECEIVED = "sms.received"
+    const val CALL_STATE = "call.state"
+    const val CALL_HISTORY = "call.history"
+    const val CALL_DIAL = "call.dial"
+    const val CALL_ANSWER = "call.answer"
+    const val CALL_REJECT = "call.reject"
+    const val RELAY_REGISTER = "relay.register"
+    const val RELAY_FORWARD = "relay.forward"
+    const val SMS_THREADS_REQUEST = "sms.threads.request"
+    const val SMS_MESSAGES_REQUEST = "sms.messages.request"
+    const val CALL_HISTORY_REQUEST = "call.history.request"
+
+    const val FILE_OFFER = "file.offer"
+    const val FILE_ACCEPT = "file.accept"
+    const val FILE_CHUNK = "file.chunk"
+    const val FILE_COMPLETE = "file.complete"
+    const val FILE_CANCEL = "file.cancel"
+    const val MEDIA_COMMAND = "media.command"
+    const val MEDIA_STATE = "media.state"
+    const val FIND_RING = "find.ring"
+    const val FIND_STOP = "find.stop"
+    const val DEVICE_STATUS = "device.status"
+    const val LINK_OPEN = "link.open"
+    const val WIFI_INFO = "wifi.info"
+    const val WIFI_REQUEST = "wifi.request"
+    const val PHOTOS_LIST_REQUEST = "photos.list.request"
+    const val PHOTOS_LIST = "photos.list"
+    const val PHOTOS_GET = "photos.get"
+    const val PREFS_QUIET = "prefs.quiet"
+}
+
+const val SERVICE_TYPE = "_marnock._tcp"
+const val SERVICE_TYPE_ANDROID = "_marnock._tcp."
