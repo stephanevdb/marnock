@@ -71,7 +71,7 @@ final class AppModel: ObservableObject {
     @Published var localOnly: Bool = true {
         didSet { UserDefaults.standard.set(localOnly, forKey: "localOnly") }
     }
-    @Published var relayURL: String = UserDefaults.standard.string(forKey: "relayURL") ?? "wss://mardock.stephanevdb.com/ws" {
+    @Published var relayURL: String = UserDefaults.standard.string(forKey: "relayURL") ?? "wss://marnock.stephanevdb.com/ws" {
         didSet { UserDefaults.standard.set(relayURL, forKey: "relayURL") }
     }
     @Published var lastClipboard: String = ""

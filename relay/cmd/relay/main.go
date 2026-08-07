@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/marnock/relay/internal/server"
+	"github.com/stephanevdb/marnock/relay/internal/server"
 )
 
 func main() {

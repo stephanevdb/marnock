@@ -150,6 +150,69 @@ jobs:
             dist/Marnock-android.apk
             dist/Marnock-macos.zip
 
+  homebrew-cask:
+    name: Update Homebrew cask
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [version, release]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: marnock-macos
+          path: dist
+
+      - name: Bump Casks/marnock.rb
+        env:
+          VERSION_NAME: ${{ needs.version.outputs.version_name }}
+        run: |
+          chmod +x scripts/update-homebrew-cask.sh
+          ./scripts/update-homebrew-cask.sh "$VERSION_NAME" dist/Marnock-macos.zip
+
+      - name: Bump Formula/marnock.rb source url
+        env:
+          VERSION_NAME: ${{ needs.version.outputs.version_name }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          # Source tarball for the tag (created by GitHub from the pushed tag).
+          curl -fsSL -o /tmp/marnock-src.tar.gz \
+            "https://github.com/${GITHUB_REPOSITORY}/archive/refs/tags/${TAG}.tar.gz"
+          SRC_SHA="$(sha256sum /tmp/marnock-src.tar.gz | awk '{print $1}')"
+          FORMULA=Formula/marnock.rb
+          tmp="$(mktemp)"
+          awk -v ver="$VERSION_NAME" -v sha="$SRC_SHA" -v repo="$GITHUB_REPOSITORY" '
+            /^  url "/ {
+              print "  url \"https://github.com/" repo "/archive/refs/tags/v" ver ".tar.gz\""
+              next
+            }
+            /^  sha256 "/ { print "  sha256 \"" sha "\""; next }
+            { print }
+          ' "$FORMULA" >"$tmp"
+          mv "$tmp" "$FORMULA"
+          echo "Updated $FORMULA → v${VERSION_NAME} sha256=${SRC_SHA}"
+
+      - name: Commit and push Homebrew metadata
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Casks/marnock.rb Formula/marnock.rb
+          if git diff --staged --quiet; then
+            echo "No Homebrew metadata changes"
+            exit 0
+          fi
+          git commit -m "chore(homebrew): bump marnock to ${{ needs.version.outputs.version_name }}"
+          # Rebase if main moved; retry once.
+          git pull --rebase origin main || true
+          git push origin HEAD:main
+
   relay-image:
     name: Build & publish relay image
     runs-on: ubuntu-latest

@@ -26,6 +26,22 @@ Discovery service type: `_marnock._tcp`.
 2. On Android, tap **Scan Mac pairing QR**.
 3. Devices exchange public keys, derive a session key, and store pairing locally.
 
+## Install (macOS via Homebrew)
+
+```bash
+brew tap stephanevdb/marnock https://github.com/stephanevdb/marnock
+brew trust --formula stephanevdb/marnock/marnock
+brew trust --cask stephanevdb/marnock/marnock
+
+brew install marnock                 # build from source (needs Xcode 15+)
+# brew install --cask marnock        # binary from GitHub Releases → /Applications
+```
+
+- **Formula** (`brew install marnock`): builds `Marnock.app` into the Cellar. Run `brew caveats marnock` for an optional `/Applications` symlink.
+- **Cask** (`brew install --cask marnock`): installs the prebuilt `Marnock-macos.zip` from GitHub Releases into `/Applications` (available after a `v*` release has been published).
+
+Tagged releases bump the Homebrew formula/cask version + checksums on `main` automatically.
+
 ## Build & run
 
 ### Prerequisites
@@ -75,7 +91,7 @@ cd android
 
 Or open `android/` in Android Studio and Run.
 
-Package id is `com.marnock.app` (replaces the old Free Phone Sync install — uninstall the previous app if it is still on the device).
+Package id is `com.marnock.app`.
 
 Enable **Notification access** from the in-app button. Grant SMS / phone / contacts permissions for those features. Start the sync foreground service (launched automatically).
 
@@ -87,7 +103,7 @@ docker compose up -d   # pulls ghcr.io/stephanevdb/marnock-relay:latest
 # or: go run ./cmd/relay -addr :8787
 ```
 
-On both apps, turn **off** “Local-only” to use the default relay (`wss://mardock.stephanevdb.com/ws`), and ensure devices are already paired (same session key). LAN is preferred when the peer is discoverable.
+On both apps, turn **off** “Local-only” to use the default relay (`wss://marnock.stephanevdb.com/ws`), and ensure devices are already paired (same session key). LAN is preferred when the peer is discoverable.
 
 ### CI
 
@@ -95,6 +111,8 @@ GitHub Actions (`.github/workflows/ci.yml`) builds the Android APK and macOS app
 
 - `Marnock-android.apk`
 - `Marnock-macos.zip`
+
+…then bumps `Formula/marnock.rb` and `Casks/marnock.rb` on `main` for Homebrew.
 
 ### Releasing & self-update
 
@@ -107,9 +125,9 @@ git push origin v1.2.3
 ```
 
 - Version comes from the tag (`v1.2.3` → `1.2.3`).
-- First install is still sideload / `adb install` / `./run.sh`; later updates use the in-app button.
+- First macOS install: Homebrew (`brew install --cask marnock`) or `./run.sh`; Android: `adb install` / Studio. Later updates use the in-app button.
 - Android may ask once to allow installs from Marnock.
-- Repo used for checks: `stephanevdb/mardock` (must be public, or clients need a token — not supported yet).
+- Repo used for checks: `stephanevdb/marnock` (must be public, or clients need a token — not supported yet).
 
 ## Features
 

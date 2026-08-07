@@ -122,6 +122,6 @@ class AppSettings(private val context: Context) {
     )
 
     companion object {
-        const val DEFAULT_RELAY_URL = "wss://mardock.stephanevdb.com/ws"
+        const val DEFAULT_RELAY_URL = "wss://marnock.stephanevdb.com/ws"
     }
 }

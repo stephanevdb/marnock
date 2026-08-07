@@ -15,7 +15,7 @@ android {
         targetSdk = 35
         versionCode = (System.getenv("VERSION_CODE") ?: "1").toInt()
         versionName = System.getenv("VERSION_NAME") ?: "1.0.0"
-        buildConfigField("String", "UPDATE_REPO", "\"stephanevdb/mardock\"")
+        buildConfigField("String", "UPDATE_REPO", "\"stephanevdb/marnock\"")
         buildConfigField("String", "UPDATE_ASSET_ANDROID", "\"Marnock-android.apk\"")
     }
 

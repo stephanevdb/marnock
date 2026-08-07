@@ -8,7 +8,7 @@ struct AppUpdateInfo: Equatable {
 }
 
 enum UpdateChecker {
-    static let repo = "stephanevdb/mardock"
+    static let repo = "stephanevdb/marnock"
     static let assetName = "Marnock-macos.zip"
 
     static var currentVersion: String {

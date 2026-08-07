@@ -32,8 +32,8 @@ class NsdBrowser(context: Context) {
 
             override fun onServiceFound(serviceInfo: NsdServiceInfo) {
                 val type = serviceInfo.serviceType.orEmpty().lowercase()
-                // Accept marnock (and legacy phonesync if an old Mac build is still advertising)
-                if (!type.contains("marnock") && !type.contains("phonesync")) return
+                // Accept marnock Bonjour/NSD advertisements only.
+                if (!type.contains("marnock")) return
                 val key = serviceInfo.serviceName
                 if (!resolving.add(key)) return
                 nsd.resolveService(serviceInfo, object : NsdManager.ResolveListener {

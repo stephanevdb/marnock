@@ -1,4 +1,4 @@
-module github.com/marnock/relay
+module github.com/stephanevdb/marnock/relay
 
 go 1.22
 
