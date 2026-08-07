@@ -11,9 +11,12 @@ go run ./cmd/relay -addr :8787
 
 ## Docker
 
+Pulls `ghcr.io/stephanevdb/marnock-relay:latest` (published by CI on `main` / `v*` tags):
+
 ```bash
 cd relay
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 ```
 
 - Health: `GET http://HOST:8787/healthz`
@@ -27,24 +30,13 @@ Stop:
 docker compose down
 ```
 
-### One-shot without Compose
+Build locally instead of GHCR:
 
 ```bash
 docker build -t marnock-relay .
 docker run --rm -p 8787:8787 --name marnock-relay marnock-relay
 ```
 
-### GHCR (CI)
-
-On push to `main` / tags `v*`, GitHub Actions publishes:
-
-`ghcr.io/<owner>/marnock-relay`
-
-```bash
-docker pull ghcr.io/OWNER/marnock-relay:latest
-docker run --rm -p 8787:8787 ghcr.io/OWNER/marnock-relay:latest
-```
-
-The package may be private until you set it public under GitHub → Packages.
+The GHCR package may be private until you set it public under GitHub → Packages (or `docker login ghcr.io`).
 
 On both apps, turn **off** “Local-only”, set the relay URL to `ws://YOUR_HOST:8787/ws`, and ensure devices are already paired.

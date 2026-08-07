@@ -83,9 +83,8 @@ Enable **Notification access** from the in-app button. Grant SMS / phone / conta
 
 ```bash
 cd relay
-docker compose up -d --build
+docker compose up -d   # pulls ghcr.io/stephanevdb/marnock-relay:latest
 # or: go run ./cmd/relay -addr :8787
-# or pull CI image: docker pull ghcr.io/<owner>/marnock-relay:latest
 ```
 
 On both apps, turn **off** “Local-only”, set the relay URL to `ws://YOUR_HOST:8787/ws`, and ensure devices are already paired (same session key). LAN is preferred when the peer is discoverable.
