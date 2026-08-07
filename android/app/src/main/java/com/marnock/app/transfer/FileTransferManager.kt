@@ -10,6 +10,7 @@ import com.marnock.app.protocol.long
 import com.marnock.app.protocol.str
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -172,6 +173,7 @@ class FileTransferManager(
                 )
                 offset += n
                 upsert(TransferProgress(id, file.name, "out", offset, file.length(), "sending"))
+                delay(5)
             }
         }
         send(

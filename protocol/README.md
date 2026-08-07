@@ -36,8 +36,8 @@ After pairing, application messages are wrapped in `session.frame` with E2E ciph
 | `call.state` / `call.history` / `call.dial` / `call.answer` / `call.reject` | mixed | Call control |
 | `relay.forward` | either→relay | `{ toDeviceId, ciphertext }` opaque routing |
 | `relay.register` | client→relay | `{ deviceId, authToken }` — hub requires matching pair tokens |
-| `file.offer` / `file.accept` / `file.chunk` / `file.complete` / `file.cancel` | mixed | LAN file transfer (accept required) |
-| `photos.list.request` / `photos.list` / `photos.get` | mixed | Camera-roll browse / pull over LAN |
+| `file.offer` / `file.accept` / `file.chunk` / `file.complete` / `file.cancel` | mixed | LAN or relay (E2E encrypted) file transfer (accept required) |
+| `photos.list.request` / `photos.list` / `photos.get` | mixed | Camera-roll browse / pull over LAN or relay (E2E encrypted) |
 | `find.ring` / `find.stop` | M→A / either | Ring misplaced phone |
 | `media.command` / `media.state` | mixed | Media session control |
 | `device.status` | A→M | Battery / Wi‑Fi / cellular snapshot |

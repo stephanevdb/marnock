@@ -81,7 +81,7 @@ class SyncAgent(
     fun start() {
         if (started) return
         started = true
-        files = FileTransferManager(context, scope) { sendAppLanOnly(it) }
+        files = FileTransferManager(context, scope) { sendApp(it) }
         deviceStatus = DeviceStatusPublisher(context, scope, wifi) { sendApp(it) }
         scope.launch {
             identity = settings.ensureIdentity()
@@ -491,12 +491,6 @@ class SyncAgent(
         } else {
             ws.sendEncrypted(env)
         }
-    }
-
-    /** Binary transfers stay on LAN only. */
-    private fun sendAppLanOnly(env: Envelope) {
-        if (useRelay) return
-        sendApp(env)
     }
 
     fun discoveredPeers() = nsd.peers

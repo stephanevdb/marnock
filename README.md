@@ -150,8 +150,8 @@ git push origin v1.2.3
 | Notifications | Android → Mac mirror; in-app + banner actions/reply |
 | SMS | Threads / messages sync, live receive, send from Mac |
 | Calls | State + history; dial / answer / reject (control only) |
-| Files | LAN chunked transfer; Accept/Reject before receive |
-| Photos | Browse phone camera roll from Mac; save over LAN |
+| Files | Chunked transfer over LAN or relay (E2E encrypted); Accept/Reject before receive |
+| Photos | Browse phone camera roll from Mac; save over LAN or relay (E2E encrypted) |
 | Find phone | Ring / stop from Mac menu bar or Home |
 | Media | Play/pause/next + volume when a session is reported |
 | Wi‑Fi name | SSID (+ note) only — apps cannot read the password |

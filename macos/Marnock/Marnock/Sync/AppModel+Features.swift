@@ -35,7 +35,7 @@ struct WifiInfo: Equatable {
 extension AppModel {
     func wireFeatureServices() {
         fileTransfer.send = { [weak self] env in self?.sendApp(env) }
-        fileTransfer.isLan = { [weak self] in self?.path == .lan }
+        fileTransfer.isConnected = { [weak self] in self?.path != .offline }
         fileTransfer.objectWillChange
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.objectWillChange.send() }

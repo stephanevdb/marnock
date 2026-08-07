@@ -345,7 +345,7 @@ fun HomeScreen(app: MarnockApp) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = "Use Android Share → Marnock to send files or open links on your Mac. " +
-                            "Photos and large files use LAN only.",
+                            "Photos and files work over LAN or relay.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

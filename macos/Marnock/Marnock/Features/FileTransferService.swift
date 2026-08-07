@@ -10,7 +10,7 @@ struct TransferProgress: Identifiable, Equatable {
     var status: String
 }
 
-/// Chunked file transfer over encrypted session frames (LAN only).
+/// Chunked file transfer over encrypted session frames (LAN or relay).
 @MainActor
 final class FileTransferService: ObservableObject {
     @Published var transfers: [TransferProgress] = []
@@ -20,7 +20,7 @@ final class FileTransferService: ObservableObject {
     private var incoming: [String: Incoming] = [:]
     private let chunkSize = 48 * 1024
     var send: ((Envelope) -> Void)?
-    var isLan: (() -> Bool)?
+    var isConnected: (() -> Bool)?
 
     private struct PendingOffer {
         let name: String
@@ -49,7 +49,7 @@ final class FileTransferService: ObservableObject {
 
     func acceptIncoming(_ id: String) {
         guard let offer = pendingIn.removeValue(forKey: id) else { return }
-        guard isLan?() == true else { return }
+        guard isConnected?() == true else { return }
         let dest = downloadsDir().appendingPathComponent(offer.name)
         FileManager.default.createFile(atPath: dest.path, contents: nil)
         guard let handle = try? FileHandle(forWritingTo: dest) else {
@@ -74,7 +74,7 @@ final class FileTransferService: ObservableObject {
     }
 
     func offer(url: URL) {
-        guard isLan?() == true else { return }
+        guard isConnected?() == true else { return }
         guard let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
               let size = attrs[.size] as? NSNumber else { return }
         guard let sha = streamSHA256(url: url) else { return }
@@ -95,7 +95,7 @@ final class FileTransferService: ObservableObject {
     func handle(_ env: Envelope) {
         switch env.type {
         case MessageTypes.fileOffer:
-            guard isLan?() == true else { return }
+            guard isConnected?() == true else { return }
             guard let id = env.payload["transferId"]?.stringValue else { return }
             let name = sanitize(env.payload["name"]?.stringValue ?? "file.bin")
             let size = Int64(env.payload["size"]?.intValue ?? 0)

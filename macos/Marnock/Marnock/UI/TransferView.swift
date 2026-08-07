@@ -21,7 +21,7 @@ struct TransferView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                SectionHeader(title: "Transfer", subtitle: "Files and photos over LAN")
+                SectionHeader(title: "Transfer", subtitle: "Files and photos over LAN or relay")
                 Spacer()
                 Picker("Mode", selection: $tab) {
                     ForEach(TransferTab.allCases) { t in
@@ -42,7 +42,7 @@ struct TransferView: View {
 
     private var filesPane: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Drag files here to send to the phone (LAN only). Received files land in ~/Downloads/Marnock/.")
+            Text("Drag files here to send to the phone (LAN or relay). Received files land in ~/Downloads/Marnock/.")
                 .foregroundStyle(.secondary)
             ZStack {
                 RoundedRectangle(cornerRadius: 12)
@@ -55,15 +55,15 @@ struct TransferView: View {
                 VStack(spacing: 8) {
                     Image(systemName: "arrow.down.doc")
                         .font(.largeTitle)
-                    Text(model.path == .lan ? "Drop files to send" : "Connect over LAN to transfer files")
+                    Text(model.path != .offline ? "Drop files to send" : "Connect over LAN or relay to transfer files")
                     Button("Choose file…") { pickFileToSend() }
-                        .disabled(model.path != .lan)
+                        .disabled(model.path == .offline)
                 }
                 .padding(32)
             }
             .frame(maxWidth: .infinity, minHeight: 160)
             .onDrop(of: [UTType.fileURL], isTargeted: $dropTargeted) { providers in
-                guard model.path == .lan else { return false }
+                guard model.path != .offline else { return false }
                 for provider in providers {
                     _ = provider.loadObject(ofClass: URL.self) { url, _ in
                         guard let url else { return }
@@ -120,7 +120,7 @@ struct TransferView: View {
                                 Text(photo.name).lineLimit(1).font(.caption)
                                 Button("Save to Mac") { model.savePhotoToMac(photo.id) }
                                     .controlSize(.small)
-                                    .disabled(model.path != .lan)
+                                    .disabled(model.path == .offline)
                             }
                         }
                     }
