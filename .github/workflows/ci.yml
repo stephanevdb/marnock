@@ -23,13 +23,20 @@ jobs:
     outputs:
       version_name: ${{ steps.v.outputs.version_name }}
       version_code: ${{ steps.v.outputs.version_code }}
+      is_release: ${{ steps.v.outputs.is_release }}
+      tag_name: ${{ steps.v.outputs.tag_name }}
     steps:
       - id: v
         run: |
+          # Tag push or workflow_dispatch --ref vX.Y.Z (from Release workflow).
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            VER="${GITHUB_REF_NAME#v}"
+            TAG="${GITHUB_REF_NAME}"
+            VER="${TAG#v}"
+            IS_RELEASE=true
           else
+            TAG=""
             VER="0.0.0-dev"
+            IS_RELEASE=false
           fi
           IFS=. read -r MAJ MIN PAT <<<"${VER%%-*}"
           MAJ=${MAJ:-0}; MIN=${MIN:-0}; PAT=${PAT:-0}
@@ -37,7 +44,9 @@ jobs:
           if [[ "$CODE" -lt 1 ]]; then CODE=1; fi
           echo "version_name=$VER" >> "$GITHUB_OUTPUT"
           echo "version_code=$CODE" >> "$GITHUB_OUTPUT"
-          echo "Resolved version_name=$VER version_code=$CODE"
+          echo "is_release=$IS_RELEASE" >> "$GITHUB_OUTPUT"
+          echo "tag_name=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Resolved version_name=$VER version_code=$CODE is_release=$IS_RELEASE tag=$TAG ref=$GITHUB_REF"
 
   android:
     name: Build Android
@@ -125,7 +134,7 @@ jobs:
 
   release:
     name: Publish GitHub Release
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: needs.version.outputs.is_release == 'true'
     needs: [version, android, macos]
     runs-on: ubuntu-latest
     permissions:
@@ -146,6 +155,7 @@ jobs:
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ needs.version.outputs.tag_name }}
           name: Marnock ${{ needs.version.outputs.version_name }}
           generate_release_notes: true
           files: |
@@ -154,7 +164,7 @@ jobs:
 
   homebrew-cask:
     name: Update Homebrew cask
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: needs.version.outputs.is_release == 'true'
     needs: [version, release]
     runs-on: ubuntu-latest
     permissions:

@@ -67,4 +67,22 @@ jobs:
           # Tag pushes with GITHUB_TOKEN do not trigger other workflows; dispatch CI
           # on the new tag so the existing release pipeline runs.
           gh workflow run ci.yml --ref "$NEXT"
-          echo "Dispatched CI for ${NEXT}"
+
+          # Wait until the dispatched run appears, then watch it to completion.
+          RUN_ID=""
+          for _ in $(seq 1 30); do
+            RUN_ID="$(gh run list --workflow=ci.yml --event=workflow_dispatch --limit 5 \
+              --json databaseId,headBranch,status,createdAt \
+              --jq "[.[] | select(.headBranch == \"${NEXT}\")] | sort_by(.createdAt) | reverse | .[0].databaseId // empty")"
+            if [[ -n "$RUN_ID" ]]; then
+              break
+            fi
+            sleep 2
+          done
+          if [[ -z "$RUN_ID" ]]; then
+            echo "Timed out waiting for CI workflow_dispatch on ${NEXT}"
+            exit 1
+          fi
+          echo "Watching CI run ${RUN_ID} for ${NEXT}"
+          gh run watch "$RUN_ID" --exit-status
+          echo "CI finished for ${NEXT}: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}"
