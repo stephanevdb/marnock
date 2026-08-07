@@ -18,6 +18,8 @@ open /Applications/Marnock.app
 2. Open the APK on your phone and allow install from that source if prompted.
 3. Launch **Marnock**, grant notification / SMS / phone permissions as needed.
 
+If an update shows **App not installed**, uninstall the old build once (early releases used a different signing key), then install the new APK. Later in-app updates should work.
+
 ### Pair
 
 1. On the Mac, open Marnock — it shows a QR code + 6-digit code.
@@ -136,8 +138,8 @@ git push origin v1.2.3
 ```
 
 - Version comes from the tag (`v1.2.3` → `1.2.3`).
-- First macOS install: Homebrew (`brew install --cask marnock`) or `./run.sh`; Android: `adb install` / Studio. Later updates use the in-app button.
-- Android may ask once to allow installs from Marnock.
+- First macOS install: Homebrew (`brew install --cask marnock`) or `./run.sh`; Android: release APK / Studio. Later updates use the in-app button.
+- Android may ask once to allow installs from Marnock. Release APKs share a stable signing key (`android/keystore/`).
 - Repo used for checks: `stephanevdb/marnock` (must be public, or clients need a token — not supported yet).
 
 ## Features

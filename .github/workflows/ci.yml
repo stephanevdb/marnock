@@ -66,16 +66,16 @@ jobs:
       - name: Accept licenses
         run: yes | sdkmanager --licenses >/dev/null || true
 
-      - name: Assemble debug APK
+      - name: Assemble release APK
         working-directory: android
         env:
           VERSION_NAME: ${{ needs.version.outputs.version_name }}
           VERSION_CODE: ${{ needs.version.outputs.version_code }}
-        run: ./gradlew :app:assembleDebug --stacktrace
+        run: ./gradlew :app:assembleRelease --stacktrace
 
       - name: Rename APK for release
         run: |
-          cp android/app/build/outputs/apk/debug/app-debug.apk Marnock-android.apk
+          cp android/app/build/outputs/apk/release/app-release.apk Marnock-android.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4

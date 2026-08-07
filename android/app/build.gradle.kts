@@ -19,8 +19,23 @@ android {
         buildConfigField("String", "UPDATE_ASSET_ANDROID", "\"Marnock-android.apk\"")
     }
 
+    // Stable project key so GitHub Release APKs can update each other (and local installs).
+    // CI runners otherwise mint a fresh debug.keystore every job → "App not installed".
+    signingConfigs {
+        create("marnock") {
+            storeFile = rootProject.file("keystore/marnock.jks")
+            storePassword = System.getenv("MARNOCK_KEYSTORE_PASSWORD") ?: "marnock"
+            keyAlias = System.getenv("MARNOCK_KEY_ALIAS") ?: "marnock"
+            keyPassword = System.getenv("MARNOCK_KEY_PASSWORD") ?: "marnock"
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("marnock")
+        }
         release {
+            signingConfig = signingConfigs.getByName("marnock")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
