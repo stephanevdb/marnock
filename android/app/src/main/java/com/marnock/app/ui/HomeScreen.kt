@@ -372,7 +372,7 @@ fun HomeScreen(app: MarnockApp) {
                         SettingToggle(
                             headline = "Clipboard",
                             supporting = if (lastClip.isBlank()) {
-                                "Mirror text between phone and Mac"
+                                "Mirror text to Mac (keep this on; sync runs in the background)"
                             } else {
                                 "Last: ${lastClip.take(48)}${if (lastClip.length > 48) "…" else ""}"
                             },

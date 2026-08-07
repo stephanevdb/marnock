@@ -20,12 +20,15 @@ class MarnockApp : Application() {
     override fun onCreate() {
         super.onCreate()
         settings = AppSettings(this)
+        // Always bind SyncAgent to application scope so FGS teardown cannot cancel clipboard/sync jobs.
         agent = SyncAgent(this, appScope, settings)
+        agent.start()
+        agentReady = true
     }
 
-    fun ensureAgent(scope: CoroutineScope = appScope) {
+    fun ensureAgent(@Suppress("UNUSED_PARAMETER") scope: CoroutineScope = appScope) {
         if (!agentReady) {
-            agent = SyncAgent(this, scope, settings)
+            agent = SyncAgent(this, appScope, settings)
             agent.start()
             agentReady = true
         }

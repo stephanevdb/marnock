@@ -26,7 +26,8 @@ class SyncForegroundService : Service() {
         createChannel()
         startForeground(NOTIF_ID, buildNotification("Starting…"))
         val app = application as MarnockApp
-        app.ensureAgent(scope)
+        // Keep SyncAgent on Application scope — never the service scope (cancelled in onDestroy).
+        app.ensureAgent()
         scope.launch {
             app.agent.path.collect { path ->
                 val text = when (path) {

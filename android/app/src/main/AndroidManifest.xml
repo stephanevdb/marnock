@@ -89,6 +89,16 @@
             android:turnScreenOn="true"
             android:theme="@style/Theme.Marnock" />
 
+        <activity
+            android:name=".clipboard.ClipboardCaptureActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.Marnock.ClipboardCapture"
+            android:showWhenLocked="true"
+            android:turnScreenOn="false" />
+
         <service
             android:name=".sync.SyncForegroundService"
             android:exported="false"

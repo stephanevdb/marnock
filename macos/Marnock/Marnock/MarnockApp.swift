@@ -24,7 +24,7 @@ struct MarnockApp: App {
             CommandGroup(replacing: .newItem) {}
         }
 
-        MenuBarExtra(menuTitle, systemImage: menuIcon) {
+        MenuBarExtra {
             MenuBarStatus()
                 .environmentObject(model)
                 .environmentObject(updates)
@@ -37,22 +37,44 @@ struct MarnockApp: App {
                         updates.checkOnLaunch()
                     }
                 }
+        } label: {
+            HStack(spacing: 3) {
+                menuBarIcon
+                if model.deviceStatus.battery >= 0 {
+                    Text(menuBatteryText)
+                        .monospacedDigit()
+                }
+            }
         }
         .menuBarExtraStyle(.window)
     }
 
-    private var menuTitle: String {
-        if model.deviceStatus.battery >= 0 {
-            return "\(model.deviceStatus.battery)%"
-        }
-        return "Marnock"
+    private var menuBatteryText: String {
+        let pct = "\(model.deviceStatus.battery)%"
+        return model.deviceStatus.charging ? "\(pct)⚡" : pct
     }
 
-    private var menuIcon: String {
+    @ViewBuilder
+    private var menuBarIcon: some View {
         switch model.path {
-        case .lan: return "iphone.and.arrow.forward"
-        case .relay: return "network"
-        case .offline: return "iphone.slash"
+        case .offline:
+            // Phone with X / slash — disconnected
+            Image(systemName: "iphone.slash")
+        case .lan:
+            // Phone with Wi‑Fi — LAN
+            if #available(macOS 14.0, *) {
+                Image(systemName: "iphone.badge.wifi")
+            } else {
+                Image(systemName: "iphone.radiowaves.left.and.right")
+            }
+        case .relay:
+            // Phone with globe — internet relay
+            Image(systemName: "iphone")
+                .overlay(alignment: .bottomTrailing) {
+                    Image(systemName: "globe")
+                        .font(.system(size: 7, weight: .bold))
+                        .offset(x: 1, y: 1)
+                }
         }
     }
 }

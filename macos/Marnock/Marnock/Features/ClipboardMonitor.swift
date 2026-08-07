@@ -33,7 +33,7 @@ final class ClipboardMonitor: @unchecked Sendable {
     }
 
     func applyRemote(_ text: String) {
-        guard enabled else { return }
+        // Always apply inbound clips when connected; `enabled` only gates Mac→phone outbound.
         if text == lastText { return }
         suppressUntil = Date().addingTimeInterval(0.75)
         lastText = text
