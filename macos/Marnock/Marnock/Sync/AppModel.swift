@@ -167,6 +167,7 @@ final class AppModel: ObservableObject {
                 self.path = .lan
                 self.status = "Phone connected over LAN"
                 self.relayClient.close()
+                self.pullPhoneInbox()
             }
         }
         server.onClientDisconnected = { [weak self] in
@@ -288,6 +289,7 @@ final class AppModel: ObservableObject {
                     "deviceId": AnyCodable(self.deviceId),
                     "authToken": AnyCodable(CryptoEngine.relayAuthToken(sessionKey: key))
                 ]), forceRelay: true)
+                self.pullPhoneInbox()
             }
         }
         relayClient.onClose = { [weak self] in
@@ -327,7 +329,21 @@ final class AppModel: ObservableObject {
             return
         }
 
+        if sessionReady && !Self.isPlaintextAllowed(env.type) {
+            return
+        }
+
         handleApp(env)
+    }
+
+    private static func isPlaintextAllowed(_ type: String) -> Bool {
+        switch type {
+        case MessageTypes.pairHello, MessageTypes.pairComplete,
+             MessageTypes.ping, MessageTypes.pong, MessageTypes.relayRegister:
+            return true
+        default:
+            return false
+        }
     }
 
     private func handleApp(_ env: Envelope) {
@@ -411,7 +427,11 @@ final class AppModel: ObservableObject {
                     date: Int64(env.payload["date"]?.intValue ?? 0),
                     type: "inbox"
                 )
-                smsMessages.append(msg)
+                let selected = smsThreads.first(where: { $0.id == selectedThreadId })
+                if selected?.address == address || selectedThreadId == msg.threadId {
+                    smsMessages.append(msg)
+                }
+                upsertSmsThread(address: address, threadId: msg.threadId, snippet: body, date: msg.date)
                 if Self.canUseUserNotifications, !notificationsSuppressed {
                     let content = UNMutableNotificationContent()
                     content.title = address
@@ -470,6 +490,7 @@ final class AppModel: ObservableObject {
             path = .lan
             status = "Paired with \(peerId)"
             refreshQR()
+            pullPhoneInbox()
         } catch {
             status = "Pairing crypto failed"
         }
@@ -561,11 +582,69 @@ final class AppModel: ObservableObject {
         sendApp(Envelope(type: MessageTypes.smsThreadsRequest))
     }
 
+    func pullPhoneInbox() {
+        guard sessionReady, path != .offline else { return }
+        refreshSmsThreads()
+        refreshCallHistory()
+    }
+
+    func startConversation(address: String) {
+        let trimmed = address.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        if let existing = smsThreads.first(where: {
+            $0.address == trimmed || $0.id == trimmed
+        }) {
+            openThread(existing.id)
+            return
+        }
+        let local = SmsThread(
+            id: "compose-\(trimmed)",
+            address: trimmed,
+            contactName: "",
+            snippet: "",
+            date: 0
+        )
+        smsThreads.insert(local, at: 0)
+        selectedThreadId = local.id
+        smsMessages = []
+    }
+
     func openThread(_ id: String) {
         selectedThreadId = id
+        if id.hasPrefix("compose-") { return }
         sendApp(Envelope(type: MessageTypes.smsMessagesRequest, payload: [
             "threadId": AnyCodable(id)
         ]))
+    }
+
+    private func upsertSmsThread(address: String, threadId: String, snippet: String, date: Int64) {
+        let matchId = threadId.isEmpty ? nil : threadId
+        if let idx = smsThreads.firstIndex(where: {
+            $0.address == address || ($0.id == matchId && matchId != nil)
+        }) {
+            let old = smsThreads.remove(at: idx)
+            smsThreads.insert(
+                SmsThread(
+                    id: old.id,
+                    address: old.address,
+                    contactName: old.contactName,
+                    snippet: snippet,
+                    date: date
+                ),
+                at: 0
+            )
+        } else {
+            smsThreads.insert(
+                SmsThread(
+                    id: matchId ?? "live-\(address)",
+                    address: address,
+                    contactName: "",
+                    snippet: snippet,
+                    date: date
+                ),
+                at: 0
+            )
+        }
     }
 
     func sendSms(address: String, body: String) {

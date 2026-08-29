@@ -77,6 +77,14 @@ class SyncAgent(
     private var currentUrl: String? = null
     private var connecting = false
     private var backoffMs = 2_000L
+    private var pendingPairing: PendingPairing? = null
+    private var pairingAttempt = 0
+
+    private data class PendingPairing(
+        val peerId: String,
+        val peerPub: String,
+        val sessionKeyB64: String
+    )
 
     fun start() {
         if (started) return
@@ -161,12 +169,17 @@ class SyncAgent(
                         }
                     )
                 )
-                settings.savePairing(
-                    peerId,
-                    peerPub,
-                    CryptoEngine.encodeB64(crypto.sessionKeyBytes()!!)
-                )
-                _status.value = "Paired with $peerId"
+                val sessionKeyB64 = CryptoEngine.encodeB64(crypto.sessionKeyBytes()!!)
+                val attempt = ++pairingAttempt
+                pendingPairing = PendingPairing(peerId, peerPub, sessionKeyB64)
+                _status.value = "Waiting for pairing confirmation…"
+                scope.launch {
+                    delay(15_000)
+                    if (pairingAttempt == attempt && pendingPairing != null) {
+                        pendingPairing = null
+                        _status.value = "Pairing timed out — scan again"
+                    }
+                }
             } catch (e: Exception) {
                 _status.value = "Pairing failed: ${e.message}"
                 Log.e(TAG, "pair", e)
@@ -209,7 +222,6 @@ class SyncAgent(
             }
 
             val lanPeer = nsd.peers.value.firstOrNull { it.deviceId == paired.peerDeviceId }
-                ?: nsd.peers.value.firstOrNull()
             if (lanPeer != null) {
                 val url = "ws://${lanPeer.host}:${lanPeer.port}/"
                 _status.value = "Connecting LAN ${lanPeer.host}:${lanPeer.port}"
@@ -368,8 +380,9 @@ class SyncAgent(
             }
         }
         jobs += scope.launch {
-            sms.changes.collect {
-                // Mac can re-request threads; optionally push a lightweight ping
+            sms.changes.collectLatest {
+                delay(250)
+                pushSmsThreads()
             }
         }
     }
@@ -377,8 +390,21 @@ class SyncAgent(
     private fun handleIncoming(env: Envelope) {
         when (env.type) {
             MessageTypes.PAIR_COMPLETE -> {
-                _status.value = "Pairing complete"
-                _path.value = if (useRelay) ConnectionPath.Relay else ConnectionPath.Lan
+                val ok = env.payload.bool("ok")
+                val pending = pendingPairing
+                if (ok && pending != null) {
+                    pendingPairing = null
+                    pairingAttempt++
+                    scope.launch {
+                        settings.savePairing(pending.peerId, pending.peerPub, pending.sessionKeyB64)
+                    }
+                    _status.value = "Pairing complete"
+                    _path.value = if (useRelay) ConnectionPath.Relay else ConnectionPath.Lan
+                } else if (!ok) {
+                    pendingPairing = null
+                    pairingAttempt++
+                    _status.value = "Pairing rejected"
+                }
             }
             MessageTypes.PING -> sendPlain(Envelope(MessageTypes.PONG, id = env.id))
             MessageTypes.CLIPBOARD_SET, MessageTypes.CLIPBOARD_CHANGED -> {
@@ -396,17 +422,7 @@ class SyncAgent(
                     env.payload["replyText"]?.let { env.payload.str("replyText") }
                 )
             }
-            MessageTypes.SMS_THREADS_REQUEST -> {
-                val threads = sms.threads()
-                sendApp(
-                    Envelope(
-                        MessageTypes.SMS_THREADS,
-                        payload = buildJsonObject {
-                            put("threads", buildJsonArray { threads.forEach { add(it.toJson()) } })
-                        }
-                    )
-                )
-            }
+            MessageTypes.SMS_THREADS_REQUEST -> pushSmsThreads()
             MessageTypes.SMS_MESSAGES_REQUEST -> {
                 val threadId = env.payload.str("threadId")
                 val messages = sms.messages(threadId)
@@ -458,7 +474,7 @@ class SyncAgent(
             }
             MessageTypes.LINK_OPEN -> {
                 val url = env.payload.str("url")
-                if (url.isNotEmpty()) {
+                if (isAllowedOpenUrl(url)) {
                     runCatching {
                         context.startActivity(
                             Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -522,6 +538,7 @@ class SyncAgent(
 
     fun openLinkOnPeer(url: String) {
         if (!::identity.isInitialized) return
+        if (!isAllowedOpenUrl(url)) return
         sendApp(
             Envelope(
                 MessageTypes.LINK_OPEN,
@@ -537,6 +554,25 @@ class SyncAgent(
         findPhone.stopRing()
         _findRinging.value = false
         sendApp(Envelope(MessageTypes.FIND_STOP))
+    }
+
+    private fun pushSmsThreads() {
+        if (session?.isOpen() != true) return
+        val threads = sms.threads()
+        sendApp(
+            Envelope(
+                MessageTypes.SMS_THREADS,
+                payload = buildJsonObject {
+                    put("threads", buildJsonArray { threads.forEach { add(it.toJson()) } })
+                }
+            )
+        )
+    }
+
+    private fun isAllowedOpenUrl(url: String): Boolean {
+        if (url.isEmpty()) return false
+        val scheme = Uri.parse(url).scheme?.lowercase() ?: return false
+        return scheme == "http" || scheme == "https"
     }
 
     companion object {

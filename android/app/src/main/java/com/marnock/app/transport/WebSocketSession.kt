@@ -8,6 +8,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.launch
@@ -37,11 +38,12 @@ class WebSocketSession(
 
     private var socket: WebSocket? = null
     private val open = AtomicBoolean(false)
-    private var readerJob: Job? = null
+    private var ingest: Channel<ByteArray>? = null
+    private var ingestJob: Job? = null
 
     private val _incoming = MutableSharedFlow<Envelope>(
-        extraBufferCapacity = 64,
-        onBufferOverflow = BufferOverflow.DROP_OLDEST
+        extraBufferCapacity = 256,
+        onBufferOverflow = BufferOverflow.SUSPEND
     )
     val incoming: SharedFlow<Envelope> = _incoming
 
@@ -50,6 +52,13 @@ class WebSocketSession(
 
     fun connect(url: String) {
         close()
+        val ch = Channel<ByteArray>(capacity = 1024)
+        ingest = ch
+        ingestJob = scope.launch(Dispatchers.Default) {
+            for (raw in ch) {
+                processBytes(raw)
+            }
+        }
         val req = Request.Builder().url(url).build()
         socket = client.newWebSocket(req, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
@@ -58,11 +67,11 @@ class WebSocketSession(
             }
 
             override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
-                handleBytes(bytes.toByteArray())
+                ch.trySend(bytes.toByteArray())
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
-                handleBytes(text.toByteArray(Charsets.UTF_8))
+                ch.trySend(text.toByteArray(Charsets.UTF_8))
             }
 
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
@@ -81,39 +90,52 @@ class WebSocketSession(
         })
     }
 
-    private fun handleBytes(raw: ByteArray) {
-        scope.launch(Dispatchers.Default) {
-            try {
-                val jsonBytes = Framing.decode(raw)
-                val env = json.decodeFromString<Envelope>(jsonBytes.toString(Charsets.UTF_8))
-                when (env.type) {
-                    MessageTypes.SESSION_FRAME -> {
-                        val nonce = CryptoEngine.decodeB64(env.payload.str("nonce"))
-                        val ct = CryptoEngine.decodeB64(env.payload.str("ciphertext"))
-                        val plain = crypto.decrypt(nonce, ct)
-                        val inner = json.decodeFromString<Envelope>(plain.toString(Charsets.UTF_8))
-                        _incoming.emit(inner)
-                    }
-                    MessageTypes.RELAY_FORWARD -> {
-                        // Outer relay envelope: ciphertext is a length-prefixed encrypted session frame JSON
-                        val blob = CryptoEngine.decodeB64(env.payload.str("ciphertext"))
-                        val innerJson = Framing.decode(blob)
-                        val wrapped = json.decodeFromString<Envelope>(innerJson.toString(Charsets.UTF_8))
-                        if (wrapped.type == MessageTypes.SESSION_FRAME) {
-                            val nonce = CryptoEngine.decodeB64(wrapped.payload.str("nonce"))
-                            val ct = CryptoEngine.decodeB64(wrapped.payload.str("ciphertext"))
-                            val plain = crypto.decrypt(nonce, ct)
-                            _incoming.emit(json.decodeFromString(plain.toString(Charsets.UTF_8)))
-                        } else {
-                            _incoming.emit(wrapped)
-                        }
-                    }
-                    else -> _incoming.emit(env)
+    private suspend fun processBytes(raw: ByteArray) {
+        try {
+            val jsonBytes = Framing.decode(raw)
+            val env = json.decodeFromString<Envelope>(jsonBytes.toString(Charsets.UTF_8))
+            when (env.type) {
+                MessageTypes.SESSION_FRAME -> {
+                    val nonce = CryptoEngine.decodeB64(env.payload.str("nonce"))
+                    val ct = CryptoEngine.decodeB64(env.payload.str("ciphertext"))
+                    val plain = crypto.decrypt(nonce, ct)
+                    val inner = json.decodeFromString<Envelope>(plain.toString(Charsets.UTF_8))
+                    _incoming.emit(inner)
                 }
-            } catch (_: Exception) {
-                // drop malformed
+                MessageTypes.RELAY_FORWARD -> {
+                    val blob = CryptoEngine.decodeB64(env.payload.str("ciphertext"))
+                    val innerJson = Framing.decode(blob)
+                    val wrapped = json.decodeFromString<Envelope>(innerJson.toString(Charsets.UTF_8))
+                    if (wrapped.type == MessageTypes.SESSION_FRAME) {
+                        val nonce = CryptoEngine.decodeB64(wrapped.payload.str("nonce"))
+                        val ct = CryptoEngine.decodeB64(wrapped.payload.str("ciphertext"))
+                        val plain = crypto.decrypt(nonce, ct)
+                        _incoming.emit(json.decodeFromString(plain.toString(Charsets.UTF_8)))
+                    } else if (isPlaintextAllowed(wrapped.type)) {
+                        _incoming.emit(wrapped)
+                    }
+                }
+                else -> {
+                    if (isPlaintextAllowed(env.type)) {
+                        _incoming.emit(env)
+                    }
+                }
             }
+        } catch (_: Exception) {
+            // drop malformed
         }
+    }
+
+    private fun isPlaintextAllowed(type: String): Boolean {
+        if (type == MessageTypes.PAIR_HELLO ||
+            type == MessageTypes.PAIR_COMPLETE ||
+            type == MessageTypes.PING ||
+            type == MessageTypes.PONG ||
+            type == MessageTypes.RELAY_REGISTER
+        ) {
+            return true
+        }
+        return !crypto.hasSessionKey()
     }
 
     fun sendPlain(envelope: Envelope) {
@@ -161,7 +183,10 @@ class WebSocketSession(
     fun isOpen(): Boolean = open.get()
 
     fun close() {
-        readerJob?.cancel()
+        ingestJob?.cancel()
+        ingest?.close()
+        ingest = null
+        ingestJob = null
         socket?.close(1000, "bye")
         socket = null
         open.set(false)

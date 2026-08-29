@@ -66,7 +66,7 @@ func (h *Hub) HandleWS(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	// File/photo chunks are ~48KiB raw and expand with base64 + envelopes; default 32KiB is too small.
 	conn.SetReadLimit(2 << 20)
-	client := &Client{conn: conn, send: make(chan []byte, 256)}
+	client := &Client{conn: conn, send: make(chan []byte, 512)}
 	go client.writeLoop(ctx)
 
 	defer func() {
@@ -216,18 +216,12 @@ func (h *Hub) forward(from *Client, to string, frame []byte) {
 }
 
 func (c *Client) enqueue(frame []byte) {
-	select {
-	case c.send <- frame:
-		return
-	default:
-	}
-	// Brief block so bursty file chunks are less likely to be dropped.
-	timer := time.NewTimer(250 * time.Millisecond)
+	timer := time.NewTimer(10 * time.Second)
 	defer timer.Stop()
 	select {
 	case c.send <- frame:
 	case <-timer.C:
-		log.Printf("send buffer full for %s", c.deviceID)
+		log.Printf("send timeout for %s", c.deviceID)
 	}
 }
 

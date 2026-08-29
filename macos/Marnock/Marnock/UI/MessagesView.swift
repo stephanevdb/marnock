@@ -18,8 +18,7 @@ struct MessagesView: View {
                     TextField("New SMS to", text: $composeAddress)
                     ContactPickerButton(title: "Contacts") { composeAddress = $0 }
                     Button("Open") {
-                        guard !composeAddress.isEmpty else { return }
-                        model.sendSms(address: composeAddress, body: "")
+                        model.startConversation(address: composeAddress)
                     }
                     .disabled(composeAddress.isEmpty)
                 }
@@ -73,5 +72,8 @@ struct MessagesView: View {
             .frame(minWidth: 320)
         }
         .padding(8)
+        .onAppear {
+            if model.smsThreads.isEmpty { model.refreshSmsThreads() }
+        }
     }
 }

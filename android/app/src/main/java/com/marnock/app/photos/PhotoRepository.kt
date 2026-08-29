@@ -53,8 +53,32 @@ class PhotoRepository(private val context: Context) {
             }
             if (out.exists()) out.absolutePath else null
         } else {
-            query(1).firstOrNull { it.id == longId }?.pathOrUri
+            queryById(longId)
         }
+    }
+
+    private fun queryById(longId: Long): String? {
+        val collection = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+        val projection = arrayOf(
+            MediaStore.Images.Media._ID,
+            MediaStore.Images.Media.DATA
+        )
+        context.contentResolver.query(
+            collection,
+            projection,
+            "${MediaStore.Images.Media._ID}=?",
+            arrayOf(longId.toString()),
+            null
+        )?.use { c ->
+            if (c.moveToFirst()) {
+                val dataCol = c.getColumnIndex(MediaStore.Images.Media.DATA)
+                if (dataCol >= 0) {
+                    val path = c.getString(dataCol)
+                    if (!path.isNullOrEmpty()) return path
+                }
+            }
+        }
+        return null
     }
 
     private fun query(limit: Int): List<PhotoItem> {

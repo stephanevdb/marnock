@@ -11,7 +11,8 @@ data class DiscoveredPeer(
     val name: String,
     val host: String,
     val port: Int,
-    val deviceId: String
+    val deviceId: String,
+    val serviceName: String = ""
 )
 
 class NsdBrowser(context: Context) {
@@ -21,6 +22,7 @@ class NsdBrowser(context: Context) {
 
     private var discoveryListener: NsdManager.DiscoveryListener? = null
     private val resolving = mutableSetOf<String>()
+    private val serviceToDeviceId = mutableMapOf<String, String>()
 
     fun start() {
         stop()
@@ -53,15 +55,22 @@ class NsdBrowser(context: Context) {
                             name = displayName,
                             host = host,
                             port = resolved.port,
-                            deviceId = deviceId
+                            deviceId = deviceId,
+                            serviceName = resolved.serviceName
                         )
+                        serviceToDeviceId[resolved.serviceName] = deviceId
                         _peers.value = (_peers.value.filterNot { it.deviceId == peer.deviceId } + peer)
                     }
                 })
             }
 
             override fun onServiceLost(serviceInfo: NsdServiceInfo) {
-                _peers.value = _peers.value.filterNot { it.name == serviceInfo.serviceName }
+                val deviceId = serviceToDeviceId.remove(serviceInfo.serviceName)
+                _peers.value = if (deviceId != null) {
+                    _peers.value.filterNot { it.deviceId == deviceId }
+                } else {
+                    _peers.value.filterNot { it.serviceName == serviceInfo.serviceName }
+                }
             }
         }
         discoveryListener = listener
@@ -73,6 +82,7 @@ class NsdBrowser(context: Context) {
             runCatching { nsd.stopServiceDiscovery(it) }
         }
         discoveryListener = null
+        serviceToDeviceId.clear()
         _peers.value = emptyList()
     }
 }

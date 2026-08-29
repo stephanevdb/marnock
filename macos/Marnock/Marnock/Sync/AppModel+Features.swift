@@ -73,10 +73,16 @@ extension AppModel {
     }
 
     func openLinkOnPhone(_ url: String) {
+        guard Self.isAllowedOpenURL(url) else { return }
         sendApp(Envelope(type: MessageTypes.linkOpen, payload: [
             "url": AnyCodable(url),
             "originDeviceId": AnyCodable(deviceId)
         ]))
+    }
+
+    static func isAllowedOpenURL(_ raw: String) -> Bool {
+        guard let url = URL(string: raw), let scheme = url.scheme?.lowercased() else { return false }
+        return scheme == "http" || scheme == "https"
     }
 
     func requestWifiInfo() {
@@ -104,10 +110,18 @@ extension AppModel {
         guard let comps = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return }
         if comps.host == "send" || url.path == "/send" {
             if let path = comps.queryItems?.first(where: { $0.name == "path" })?.value {
-                sendFile(url: URL(fileURLWithPath: path))
+                let fileURL = URL(fileURLWithPath: path)
+                let alert = NSAlert()
+                alert.messageText = "Send file to phone?"
+                alert.informativeText = fileURL.lastPathComponent
+                alert.addButton(withTitle: "Send")
+                alert.addButton(withTitle: "Cancel")
+                guard alert.runModal() == .alertFirstButtonReturn else { return }
+                sendFile(url: fileURL)
             }
         } else if comps.host == "open" || url.path == "/open" {
-            if let link = comps.queryItems?.first(where: { $0.name == "url" })?.value {
+            if let link = comps.queryItems?.first(where: { $0.name == "url" })?.value,
+               Self.isAllowedOpenURL(link) {
                 openLinkOnPhone(link)
             }
         }
@@ -138,6 +152,7 @@ extension AppModel {
             return true
         case MessageTypes.linkOpen:
             if let urlStr = env.payload["url"]?.stringValue,
+               Self.isAllowedOpenURL(urlStr),
                let url = URL(string: urlStr),
                env.payload["originDeviceId"]?.stringValue != deviceId {
                 NSWorkspace.shared.open(url)

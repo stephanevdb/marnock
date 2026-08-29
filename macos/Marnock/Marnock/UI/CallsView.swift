@@ -51,5 +51,8 @@ struct CallsView: View {
             }
         }
         .padding(24)
+        .onAppear {
+            if model.callHistory.isEmpty { model.refreshCallHistory() }
+        }
     }
 }

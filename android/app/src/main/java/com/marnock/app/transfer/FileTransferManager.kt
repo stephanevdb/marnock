@@ -19,7 +19,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import java.io.File
 import java.io.FileInputStream
-import java.io.FileOutputStream
+import java.io.RandomAccessFile
 import java.security.MessageDigest
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -68,9 +68,16 @@ class FileTransferManager(
     }
 
     fun acceptIncoming(id: String) {
-        val offer = pendingIn.remove(id) ?: return
+        val offer = pendingIn[id] ?: return
         val dest = File(downloadsDir(), sanitize(offer.name))
-        incoming[id] = Incoming(dest, offer.size, offer.sha, FileOutputStream(dest))
+        val raf = try {
+            RandomAccessFile(dest, "rw")
+        } catch (_: Exception) {
+            rejectIncoming(id)
+            return
+        }
+        pendingIn.remove(id)
+        incoming[id] = Incoming(dest, offer.size, offer.sha, raf)
         upsert(TransferProgress(id, dest.name, "in", 0, offer.size, "receiving"))
         send(
             Envelope(
@@ -123,29 +130,50 @@ class FileTransferManager(
                 val dataB64 = env.payload.str("data")
                 val bytes = Base64.decode(dataB64, Base64.DEFAULT)
                 val inc = incoming[id] ?: return
-                synchronized(inc) {
-                    inc.out.write(bytes)
-                    inc.done = offset + bytes.size
-                }
-                upsert(
-                    TransferProgress(
-                        id, inc.file.name, "in", inc.done, inc.total,
-                        if (inc.done >= inc.total) "finishing" else "receiving"
+                try {
+                    synchronized(inc) {
+                        inc.raf.seek(offset)
+                        inc.raf.write(bytes)
+                        inc.done = offset + bytes.size
+                    }
+                    upsert(
+                        TransferProgress(
+                            id, inc.file.name, "in", inc.done, inc.total,
+                            if (inc.done >= inc.total) "finishing" else "receiving"
+                        )
                     )
-                )
+                } catch (_: Exception) {
+                    incoming.remove(id)
+                    runCatching { inc.raf.close() }
+                    inc.file.delete()
+                    send(
+                        Envelope(
+                            MessageTypes.FILE_CANCEL,
+                            payload = buildJsonObject { put("transferId", id) }
+                        )
+                    )
+                    upsert(TransferProgress(id, inc.file.name, "in", inc.done, inc.total, "failed"))
+                }
             }
             MessageTypes.FILE_COMPLETE -> {
                 val id = env.payload.str("transferId")
                 val inc = incoming.remove(id) ?: return
                 synchronized(inc) {
-                    inc.out.flush()
-                    inc.out.close()
+                    runCatching { inc.raf.close() }
+                }
+                val actual = runCatching { sha256(inc.file) }.getOrNull()
+                if (inc.sha.isNotEmpty() && (actual == null || !actual.equals(inc.sha, ignoreCase = true))) {
+                    inc.file.delete()
+                    upsert(TransferProgress(id, inc.file.name, "in", inc.done, inc.total, "failed"))
+                    return
                 }
                 upsert(TransferProgress(id, inc.file.name, "in", inc.total, inc.total, "complete"))
             }
             MessageTypes.FILE_CANCEL -> {
                 val id = env.payload.str("transferId")
-                incoming.remove(id)?.out?.close()
+                incoming.remove(id)?.let {
+                    runCatching { it.raf.close() }
+                }
                 pendingOut.remove(id)
                 pendingIn.remove(id)
                 upsert(TransferProgress(id, id, "?", 0, 0, "cancelled"))
@@ -200,7 +228,7 @@ class FileTransferManager(
     }
 
     fun cancel(id: String) {
-        incoming.remove(id)?.out?.close()
+        incoming.remove(id)?.let { runCatching { it.raf.close() } }
         pendingOut.remove(id)
         pendingIn.remove(id)
         send(
@@ -235,12 +263,15 @@ class FileTransferManager(
         val file: File,
         val total: Long,
         val sha: String,
-        val out: FileOutputStream,
+        val raf: RandomAccessFile,
         var done: Long = 0
     )
 
-    private fun sanitize(name: String): String =
-        name.replace(Regex("[^A-Za-z0-9._-]"), "_").ifEmpty { "file.bin" }
+    private fun sanitize(name: String): String {
+        val base = name.substringAfterLast('/').substringAfterLast('\\')
+        val cleaned = base.replace(Regex("[^A-Za-z0-9._-]"), "_").trim('.', '_')
+        return if (cleaned.isEmpty() || cleaned == "." || cleaned == "..") "file.bin" else cleaned
+    }
 
     companion object {
         private const val CHUNK = 48 * 1024

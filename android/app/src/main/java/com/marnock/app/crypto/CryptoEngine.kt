@@ -44,6 +44,8 @@ class CryptoEngine(
 
     fun sessionKeyBytes(): ByteArray? = sessionKey?.copyOf()
 
+    fun hasSessionKey(): Boolean = sessionKey != null
+
     fun encrypt(plaintext: ByteArray): Pair<ByteArray, ByteArray> {
         val key = sessionKey ?: error("No session key")
         val nonce = ByteArray(12).also { SecureRandom().nextBytes(it) }

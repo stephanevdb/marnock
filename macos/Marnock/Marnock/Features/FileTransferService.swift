@@ -33,6 +33,7 @@ final class FileTransferService: ObservableObject {
         let total: Int64
         let handle: FileHandle
         var done: Int64
+        let sha256: String
     }
 
     func cancel(_ id: String) {
@@ -48,7 +49,7 @@ final class FileTransferService: ObservableObject {
     }
 
     func acceptIncoming(_ id: String) {
-        guard let offer = pendingIn.removeValue(forKey: id) else { return }
+        guard let offer = pendingIn[id] else { return }
         guard isConnected?() == true else { return }
         let dest = downloadsDir().appendingPathComponent(offer.name)
         FileManager.default.createFile(atPath: dest.path, contents: nil)
@@ -56,7 +57,8 @@ final class FileTransferService: ObservableObject {
             rejectIncoming(id)
             return
         }
-        incoming[id] = Incoming(url: dest, total: offer.size, handle: handle, done: 0)
+        pendingIn.removeValue(forKey: id)
+        incoming[id] = Incoming(url: dest, total: offer.size, handle: handle, done: 0, sha256: offer.sha256)
         upsert(TransferProgress(id: id, name: offer.name, direction: "in", bytesDone: 0, bytesTotal: offer.size, status: "receiving"))
         send?(Envelope(type: MessageTypes.fileAccept, payload: [
             "transferId": AnyCodable(id),
@@ -104,7 +106,7 @@ final class FileTransferService: ObservableObject {
             acceptIncoming(id)
         case MessageTypes.fileAccept:
             guard let id = env.payload["transferId"]?.stringValue else { return }
-            let ok = env.payload["ok"]?.boolValue ?? true
+            let ok = env.payload["ok"]?.boolValue ?? false
             guard let url = pendingOut.removeValue(forKey: id) else { return }
             if !ok {
                 upsert(TransferProgress(id: id, name: url.lastPathComponent, direction: "out", bytesDone: 0, bytesTotal: 0, status: "rejected"))
@@ -123,11 +125,25 @@ final class FileTransferService: ObservableObject {
                 inc.done = offset + Int64(data.count)
                 incoming[id] = inc
                 upsert(TransferProgress(id: id, name: inc.url.lastPathComponent, direction: "in", bytesDone: inc.done, bytesTotal: inc.total, status: "receiving"))
-            } catch { }
+            } catch {
+                incoming.removeValue(forKey: id)
+                try? inc.handle.close()
+                try? FileManager.default.removeItem(at: inc.url)
+                send?(Envelope(type: MessageTypes.fileCancel, payload: [
+                    "transferId": AnyCodable(id)
+                ]))
+                upsert(TransferProgress(id: id, name: inc.url.lastPathComponent, direction: "in", bytesDone: inc.done, bytesTotal: inc.total, status: "failed"))
+            }
         case MessageTypes.fileComplete:
             guard let id = env.payload["transferId"]?.stringValue,
                   let inc = incoming.removeValue(forKey: id) else { return }
             try? inc.handle.close()
+            if !inc.sha256.isEmpty, let actual = streamSHA256(url: inc.url),
+               actual.caseInsensitiveCompare(inc.sha256) != .orderedSame {
+                try? FileManager.default.removeItem(at: inc.url)
+                upsert(TransferProgress(id: id, name: inc.url.lastPathComponent, direction: "in", bytesDone: inc.done, bytesTotal: inc.total, status: "failed"))
+                return
+            }
             upsert(TransferProgress(id: id, name: inc.url.lastPathComponent, direction: "in", bytesDone: inc.total, bytesTotal: inc.total, status: "complete"))
         case MessageTypes.fileCancel:
             guard let id = env.payload["transferId"]?.stringValue else { return }
@@ -148,17 +164,23 @@ final class FileTransferService: ObservableObject {
         let total = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.int64Value ?? 0
         var offset: Int64 = 0
         while offset < total {
-            autoreleasepool {
+            let data: Data = autoreleasepool {
                 handle.seek(toFileOffset: UInt64(offset))
-                let data = handle.readData(ofLength: chunkSize)
-                guard !data.isEmpty else { return }
-                send?(Envelope(type: MessageTypes.fileChunk, payload: [
-                    "transferId": AnyCodable(id),
-                    "offset": AnyCodable(offset),
-                    "data": AnyCodable(data.base64EncodedString())
-                ]))
-                offset += Int64(data.count)
+                return handle.readData(ofLength: chunkSize)
             }
+            guard !data.isEmpty else {
+                send?(Envelope(type: MessageTypes.fileCancel, payload: [
+                    "transferId": AnyCodable(id)
+                ]))
+                upsert(TransferProgress(id: id, name: url.lastPathComponent, direction: "out", bytesDone: offset, bytesTotal: total, status: "failed"))
+                return
+            }
+            send?(Envelope(type: MessageTypes.fileChunk, payload: [
+                "transferId": AnyCodable(id),
+                "offset": AnyCodable(offset),
+                "data": AnyCodable(data.base64EncodedString())
+            ]))
+            offset += Int64(data.count)
             upsert(TransferProgress(id: id, name: url.lastPathComponent, direction: "out", bytesDone: offset, bytesTotal: total, status: "sending"))
             try? await Task.sleep(nanoseconds: 5_000_000)
         }
@@ -189,8 +211,11 @@ final class FileTransferService: ObservableObject {
     }
 
     private func sanitize(_ name: String) -> String {
-        let cleaned = name.replacingOccurrences(of: "/", with: "_")
-        return cleaned.isEmpty ? "file.bin" : cleaned
+        let base = (name as NSString).lastPathComponent
+        let cleaned = base.replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "\\", with: "_")
+        if cleaned.isEmpty || cleaned == "." || cleaned == ".." { return "file.bin" }
+        return cleaned
     }
 
     private func upsert(_ p: TransferProgress) {
