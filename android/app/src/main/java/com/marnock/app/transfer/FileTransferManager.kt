@@ -105,7 +105,7 @@ class FileTransferManager(
                 val size = env.payload.long("size")
                 val sha = env.payload.str("sha256")
                 pendingIn[id] = PendingOffer(sanitize(name), size, sha)
-                upsert(TransferProgress(id, sanitize(name), "in", 0, size, "awaiting"))
+                acceptIncoming(id)
             }
             MessageTypes.FILE_ACCEPT -> {
                 val id = env.payload.str("transferId")

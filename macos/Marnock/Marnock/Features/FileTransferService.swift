@@ -101,7 +101,7 @@ final class FileTransferService: ObservableObject {
             let size = Int64(env.payload["size"]?.intValue ?? 0)
             let sha = env.payload["sha256"]?.stringValue ?? ""
             pendingIn[id] = PendingOffer(name: name, size: size, sha256: sha)
-            upsert(TransferProgress(id: id, name: name, direction: "in", bytesDone: 0, bytesTotal: size, status: "awaiting"))
+            acceptIncoming(id)
         case MessageTypes.fileAccept:
             guard let id = env.payload["transferId"]?.stringValue else { return }
             let ok = env.payload["ok"]?.boolValue ?? true

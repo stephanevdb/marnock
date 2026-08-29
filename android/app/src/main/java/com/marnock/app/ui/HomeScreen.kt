@@ -299,7 +299,7 @@ fun HomeScreen(app: MarnockApp) {
                     Spacer(modifier = Modifier.height(8.dp))
                     if (transfers.isEmpty()) {
                         Text(
-                            text = "Incoming and outgoing files appear here. Accept offers before they start.",
+                            text = "Incoming and outgoing files appear here. Incoming files save to Downloads/Marnock.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -326,13 +326,7 @@ fun HomeScreen(app: MarnockApp) {
                                             modifier = Modifier.fillMaxWidth()
                                         )
                                     }
-                                    if (t.status == "awaiting") {
-                                        Spacer(modifier = Modifier.height(8.dp))
-                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            Button(onClick = { app.agent.acceptTransfer(t.id) }) { Text("Accept") }
-                                            TextButton(onClick = { app.agent.rejectTransfer(t.id) }) { Text("Reject") }
-                                        }
-                                    } else if (t.status == "sending" || t.status == "receiving" || t.status == "offering") {
+                                    if (t.status == "sending" || t.status == "receiving" || t.status == "offering") {
                                         Spacer(modifier = Modifier.height(8.dp))
                                         TextButton(onClick = { app.agent.cancelTransfer(t.id) }) { Text("Cancel") }
                                     }
