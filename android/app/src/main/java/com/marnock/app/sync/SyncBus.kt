@@ -1,6 +1,7 @@
 package com.marnock.app.sync
 
 import com.marnock.app.notifications.MirrorNotificationListener
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.serialization.json.JsonArray
@@ -25,10 +26,16 @@ object SyncBus {
 
     data class SmsIncoming(val address: String, val body: String, val date: Long)
 
-    private val _notifPosted = MutableSharedFlow<NotifPosted>(extraBufferCapacity = 32)
+    private val _notifPosted = MutableSharedFlow<NotifPosted>(
+        extraBufferCapacity = 64,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
     val notifPosted: SharedFlow<NotifPosted> = _notifPosted
 
-    private val _notifRemoved = MutableSharedFlow<String>(extraBufferCapacity = 32)
+    private val _notifRemoved = MutableSharedFlow<String>(
+        extraBufferCapacity = 64,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
     val notifRemoved: SharedFlow<String> = _notifRemoved
 
     private val _smsIncoming = MutableSharedFlow<SmsIncoming>(extraBufferCapacity = 32)

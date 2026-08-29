@@ -3,8 +3,10 @@ package com.marnock.app
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.provider.OpenableColumns
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import com.marnock.app.transfer.MimeExtensions
 import java.io.File
 
 /**
@@ -30,7 +32,6 @@ class ShareActivity : ComponentActivity() {
                 app.agent.openLinkOnPeer(text)
                 toast("Opening link on Mac")
             } else {
-                // Treat as small text file
                 val f = File(cacheDir, "shared-text.txt")
                 f.writeText(text)
                 app.agent.sendFileToPeer(f.absolutePath, "text/plain")
@@ -54,17 +55,47 @@ class ShareActivity : ComponentActivity() {
     }
 
     private fun copyAndSend(app: MarnockApp, uri: Uri, mime: String) {
-        val name = uri.lastPathSegment?.substringAfterLast('/') ?: "shared.bin"
-        val out = File(cacheDir, "share-${System.currentTimeMillis()}-$name")
+        val resolvedMime = mime.ifBlank { contentResolver.getType(uri).orEmpty() }
+        val name = uniqueCacheName(displayName(uri, resolvedMime))
+        val out = File(cacheDir, name)
         contentResolver.openInputStream(uri)?.use { input ->
             out.outputStream().use { input.copyTo(it) }
         }
         if (out.exists()) {
-            app.agent.sendFileToPeer(out.absolutePath, mime)
+            app.agent.sendFileToPeer(
+                out.absolutePath,
+                resolvedMime.ifBlank { "application/octet-stream" }
+            )
         }
+    }
+
+    private fun displayName(uri: Uri, mime: String): String {
+        var name: String? = null
+        runCatching {
+            contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+                if (c.moveToFirst()) {
+                    val idx = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (idx >= 0) name = c.getString(idx)
+                }
+            }
+        }
+        if (name.isNullOrBlank()) {
+            name = uri.lastPathSegment?.substringAfterLast('/')
+        }
+        return MimeExtensions.ensureExtension(name?.substringAfterLast('/') ?: "shared", mime)
+    }
+
+    private fun uniqueCacheName(name: String): String {
+        val dest = File(cacheDir, name)
+        if (!dest.exists()) return name
+        val dot = name.lastIndexOf('.')
+        val stem = if (dot > 0) name.substring(0, dot) else name
+        val ext = if (dot > 0) name.substring(dot) else ""
+        return "$stem-${System.currentTimeMillis()}$ext"
     }
 
     private fun toast(msg: String) {
         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
     }
+
 }

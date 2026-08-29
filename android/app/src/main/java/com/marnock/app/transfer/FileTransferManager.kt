@@ -109,9 +109,10 @@ class FileTransferManager(
             MessageTypes.FILE_OFFER -> {
                 val id = env.payload.str("transferId")
                 val name = env.payload.str("name")
+                val mime = env.payload.str("mime")
                 val size = env.payload.long("size")
                 val sha = env.payload.str("sha256")
-                pendingIn[id] = PendingOffer(sanitize(name), size, sha)
+                pendingIn[id] = PendingOffer(sanitize(name, mime), size, sha)
                 acceptIncoming(id)
             }
             MessageTypes.FILE_ACCEPT -> {
@@ -267,10 +268,15 @@ class FileTransferManager(
         var done: Long = 0
     )
 
-    private fun sanitize(name: String): String {
+    private fun sanitize(name: String, mime: String = ""): String {
         val base = name.substringAfterLast('/').substringAfterLast('\\')
-        val cleaned = base.replace(Regex("[^A-Za-z0-9._-]"), "_").trim('.', '_')
-        return if (cleaned.isEmpty() || cleaned == "." || cleaned == "..") "file.bin" else cleaned
+        var cleaned = base.replace(Regex("[^A-Za-z0-9._-]"), "_").trim('.', '_')
+        if (cleaned.isEmpty() || cleaned == "." || cleaned == "..") cleaned = "file.bin"
+        if (!cleaned.contains('.') && mime.isNotEmpty()) {
+            val ext = MimeExtensions.extensionForMime(mime)
+            if (!ext.isNullOrEmpty()) cleaned = "$cleaned.$ext"
+        }
+        return cleaned
     }
 
     companion object {

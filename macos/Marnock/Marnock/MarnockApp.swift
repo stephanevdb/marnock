@@ -122,4 +122,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         }
         completionHandler()
     }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        // Menu-bar accessory is always "foreground"; without this, banners never appear.
+        completionHandler([.banner, .list, .sound])
+    }
 }

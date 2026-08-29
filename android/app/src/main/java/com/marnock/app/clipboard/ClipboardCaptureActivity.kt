@@ -20,13 +20,27 @@ class ClipboardCaptureActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE)
-        // Empty content; we only need window focus.
-        main.postDelayed({ finishCapture(null) }, 1_200)
+        main.postDelayed({ finishCapture(null) }, 800)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        tryRead()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        finished = false
+        tryRead()
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
-        if (!hasFocus || finished) return
+        if (hasFocus) tryRead()
+    }
+
+    private fun tryRead() {
+        if (finished) return
         val cm = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
         val text = try {
             val clip = cm.primaryClip
@@ -36,7 +50,8 @@ class ClipboardCaptureActivity : Activity() {
         } catch (_: SecurityException) {
             null
         }
-        finishCapture(text?.takeIf { it.isNotBlank() })
+        val value = text?.takeIf { it.isNotBlank() } ?: return
+        finishCapture(value)
     }
 
     private fun finishCapture(text: String?) {
@@ -61,7 +76,8 @@ class ClipboardCaptureActivity : Activity() {
                         Intent.FLAG_ACTIVITY_NO_ANIMATION or
                         Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS or
                         Intent.FLAG_ACTIVITY_NO_HISTORY or
-                        Intent.FLAG_ACTIVITY_SINGLE_TOP
+                        Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                        Intent.FLAG_ACTIVITY_CLEAR_TOP
                 )
             }
             return try {

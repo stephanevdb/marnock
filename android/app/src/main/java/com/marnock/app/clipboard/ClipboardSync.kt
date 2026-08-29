@@ -5,6 +5,7 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 
@@ -25,7 +26,10 @@ class ClipboardSync(private val context: Context) {
     @Volatile private var captureGeneration = 0
     @Volatile private var lastNotifAt = 0L
 
-    private val _localChanges = MutableSharedFlow<String>(extraBufferCapacity = 8)
+    private val _localChanges = MutableSharedFlow<String>(
+        extraBufferCapacity = 8,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
     val localChanges: SharedFlow<String> = _localChanges
 
     private val listener = ClipboardManager.OnPrimaryClipChangedListener {
@@ -46,6 +50,7 @@ class ClipboardSync(private val context: Context) {
                 clipboard.addPrimaryClipChangedListener(listener)
                 listenerRegistered = true
             }
+            pollIfReadable()
         } else if (listenerRegistered) {
             clipboard.removePrimaryClipChangedListener(listener)
             listenerRegistered = false
@@ -96,9 +101,8 @@ class ClipboardSync(private val context: Context) {
     }
 
     private fun requestBackgroundCapture() {
-        if (awaitingCapture) return
-        awaitingCapture = true
         val gen = ++captureGeneration
+        awaitingCapture = true
         val started = ClipboardCaptureActivity.start(context.applicationContext)
         if (!started) {
             awaitingCapture = false
@@ -111,7 +115,7 @@ class ClipboardSync(private val context: Context) {
                 awaitingCapture = false
                 offerCaptureNotification()
             }
-        }, 1_200)
+        }, 800)
     }
 
     private fun offerCaptureNotification() {

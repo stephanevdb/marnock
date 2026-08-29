@@ -6,12 +6,23 @@ final class ClipboardMonitor: @unchecked Sendable {
     private var lastChangeCount: Int = NSPasteboard.general.changeCount
     private var lastText: String = ""
     private var suppressUntil: Date = .distantPast
+    private var activateObserver: NSObjectProtocol?
     var enabled: Bool = false
     var onLocalChange: ((String) -> Void)?
 
     func start() {
         stop()
-        timer = Timer.scheduledTimer(withTimeInterval: 0.45, repeats: true) { [weak self] _ in
+        lastChangeCount = NSPasteboard.general.changeCount
+        let t = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
+            self?.tick()
+        }
+        RunLoop.main.add(t, forMode: .common)
+        timer = t
+        activateObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
             self?.tick()
         }
     }
@@ -19,6 +30,22 @@ final class ClipboardMonitor: @unchecked Sendable {
     func stop() {
         timer?.invalidate()
         timer = nil
+        if let activateObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(activateObserver)
+            self.activateObserver = nil
+        }
+    }
+
+    func currentString() -> String? {
+        NSPasteboard.general.string(forType: .string)?.nilIfBlank
+    }
+
+    /// Mark the current pasteboard as the last-seen local clip and return it (for enable/reconnect flush).
+    func snapshotCurrent() -> String? {
+        guard enabled, let text = currentString() else { return nil }
+        lastText = text
+        lastChangeCount = NSPasteboard.general.changeCount
+        return text
     }
 
     private func tick() {
@@ -27,13 +54,12 @@ final class ClipboardMonitor: @unchecked Sendable {
         guard pb.changeCount != lastChangeCount else { return }
         lastChangeCount = pb.changeCount
         if Date() < suppressUntil { return }
-        guard let text = pb.string(forType: .string), text != lastText else { return }
+        guard let text = pb.string(forType: .string)?.nilIfBlank, text != lastText else { return }
         lastText = text
         onLocalChange?(text)
     }
 
     func applyRemote(_ text: String) {
-        // Always apply inbound clips when connected; `enabled` only gates Mac→phone outbound.
         if text == lastText { return }
         suppressUntil = Date().addingTimeInterval(0.75)
         let pb = NSPasteboard.general
@@ -41,5 +67,12 @@ final class ClipboardMonitor: @unchecked Sendable {
         guard pb.setString(text, forType: .string) else { return }
         lastText = text
         lastChangeCount = pb.changeCount
+    }
+}
+
+private extension String {
+    var nilIfBlank: String? {
+        let t = trimmingCharacters(in: .whitespacesAndNewlines)
+        return t.isEmpty ? nil : self
     }
 }

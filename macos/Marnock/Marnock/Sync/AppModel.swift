@@ -66,6 +66,7 @@ final class AppModel: ObservableObject {
         didSet {
             clipboard.enabled = clipboardEnabled
             UserDefaults.standard.set(clipboardEnabled, forKey: "clipboardEnabled")
+            if clipboardEnabled { flushClipboard(forceCurrent: true) }
         }
     }
     @Published var localOnly: Bool = true {
@@ -116,6 +117,7 @@ final class AppModel: ObservableObject {
     private let clipboard = ClipboardMonitor()
     private var useRelay = false
     private var sessionReady = false
+    private var pendingClipboard: String?
     private var lanPort: UInt16 = 0
     private var cancellables = Set<AnyCancellable>()
     var featureCancellables = Set<AnyCancellable>()
@@ -168,6 +170,7 @@ final class AppModel: ObservableObject {
                 self.status = "Phone connected over LAN"
                 self.relayClient.close()
                 self.pullPhoneInbox()
+                self.flushClipboard()
             }
         }
         server.onClientDisconnected = { [weak self] in
@@ -195,15 +198,7 @@ final class AppModel: ObservableObject {
         }
 
         clipboard.onLocalChange = { [weak self] text in
-            Task { @MainActor in
-                guard let self else { return }
-                self.lastClipboard = String(text.prefix(200))
-                self.sendApp(Envelope(type: MessageTypes.clipboardChanged, payload: [
-                    "text": AnyCodable(text),
-                    "originDeviceId": AnyCodable(self.deviceId),
-                    "ts": AnyCodable(Int(Date().timeIntervalSince1970 * 1000))
-                ]))
-            }
+            Task { @MainActor in self?.sendClipboard(text) }
         }
         clipboard.enabled = clipboardEnabled
         clipboard.start()
@@ -290,6 +285,7 @@ final class AppModel: ObservableObject {
                     "authToken": AnyCodable(CryptoEngine.relayAuthToken(sessionKey: key))
                 ]), forceRelay: true)
                 self.pullPhoneInbox()
+                self.flushClipboard()
             }
         }
         relayClient.onClose = { [weak self] in
@@ -436,6 +432,10 @@ final class AppModel: ObservableObject {
                     let content = UNMutableNotificationContent()
                     content.title = address
                     content.body = body
+                    content.sound = .default
+                    if #available(macOS 12.0, *) {
+                        content.interruptionLevel = .timeSensitive
+                    }
                     UNUserNotificationCenter.current().add(
                         UNNotificationRequest(identifier: msg.id, content: content, trigger: nil)
                     )
@@ -491,6 +491,7 @@ final class AppModel: ObservableObject {
             status = "Paired with \(peerId)"
             refreshQR()
             pullPhoneInbox()
+            flushClipboard()
         } catch {
             status = "Pairing crypto failed"
         }
@@ -528,16 +529,45 @@ final class AppModel: ObservableObject {
             next.insert(category)
             UNUserNotificationCenter.current().setNotificationCategories(next)
             let content = UNMutableNotificationContent()
-            content.title = n.title.isEmpty ? n.packageName : n.title
-            content.body = n.text
+            content.title = n.title.isEmpty ? (n.packageName.isEmpty ? "Phone" : n.packageName) : n.title
+            content.body = n.text.isEmpty ? "Notification from your phone" : n.text
+            content.sound = .default
             content.categoryIdentifier = categoryId
             content.userInfo = [
                 "key": n.id,
                 "packageName": n.packageName
             ]
+            if #available(macOS 12.0, *) {
+                content.interruptionLevel = .timeSensitive
+            }
             UNUserNotificationCenter.current().add(
                 UNNotificationRequest(identifier: n.id, content: content, trigger: nil)
             )
+        }
+    }
+
+    func sendClipboard(_ text: String) {
+        lastClipboard = String(text.prefix(200))
+        guard sessionReady, path != .offline else {
+            pendingClipboard = text
+            return
+        }
+        pendingClipboard = nil
+        sendApp(Envelope(type: MessageTypes.clipboardChanged, payload: [
+            "text": AnyCodable(text),
+            "originDeviceId": AnyCodable(deviceId),
+            "ts": AnyCodable(Int(Date().timeIntervalSince1970 * 1000))
+        ]))
+    }
+
+    func flushClipboard(forceCurrent: Bool = false) {
+        guard clipboardEnabled else { return }
+        if let pending = pendingClipboard {
+            sendClipboard(pending)
+            return
+        }
+        if forceCurrent, let text = clipboard.snapshotCurrent() {
+            sendClipboard(text)
         }
     }
 

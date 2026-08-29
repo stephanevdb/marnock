@@ -29,9 +29,18 @@ class MirrorNotificationListener : NotificationListenerService() {
         sbn ?: return
         if (sbn.packageName == packageName) return
         val n = sbn.notification
+        if (n.flags and Notification.FLAG_GROUP_SUMMARY != 0) return
+        if (n.flags and Notification.FLAG_FOREGROUND_SERVICE != 0) return
+        when (n.category) {
+            Notification.CATEGORY_SERVICE, Notification.CATEGORY_TRANSPORT -> return
+        }
         val extras = n.extras
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
-        val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString().orEmpty()
+        val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()
+            ?: extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()
+            ?: extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString()
+            ?: ""
+        if (title.isBlank() && text.isBlank()) return
         val actions = buildJsonArray {
             n.actions?.forEachIndexed { index, action ->
                 add(

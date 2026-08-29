@@ -8,7 +8,7 @@ struct NotificationsView: View {
         VStack(alignment: .leading, spacing: 12) {
             SectionHeader(
                 title: "Notifications",
-                subtitle: "Mirrored alerts from your phone"
+                subtitle: "Phone alerts also appear as Mac banners"
             )
 
             if model.notificationsSuppressed {

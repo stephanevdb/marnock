@@ -79,6 +79,7 @@ class SyncAgent(
     private var backoffMs = 2_000L
     private var pendingPairing: PendingPairing? = null
     private var pairingAttempt = 0
+    private var pendingClipboard: String? = null
 
     private data class PendingPairing(
         val peerId: String,
@@ -315,6 +316,7 @@ class SyncAgent(
                     connecting = false
                     _path.value = if (useRelay) ConnectionPath.Relay else ConnectionPath.Lan
                     _status.value = if (useRelay) "Connected (Relay)" else "Connected (LAN)"
+                    flushClipboard()
                 } else if (!connecting) {
                     _path.value = ConnectionPath.Offline
                     if (_status.value.startsWith("Connected")) {
@@ -328,17 +330,7 @@ class SyncAgent(
     private fun wireLocalEmitters() {
         jobs += scope.launch {
             clipboard.localChanges.collect { text ->
-                _lastClipboard.value = text.take(200)
-                sendApp(
-                    Envelope(
-                        type = MessageTypes.CLIPBOARD_CHANGED,
-                        payload = buildJsonObject {
-                            put("text", text)
-                            put("originDeviceId", identity.deviceId)
-                            put("ts", System.currentTimeMillis())
-                        }
-                    )
-                )
+                sendClipboard(text)
             }
         }
         jobs += scope.launch {
@@ -504,15 +496,42 @@ class SyncAgent(
         session?.sendPlain(env)
     }
 
-    private fun sendApp(env: Envelope) {
-        val ws = session ?: return
-        if (!ws.isOpen()) return
+    private fun sendClipboard(text: String) {
+        _lastClipboard.value = text.take(200)
+        val env = Envelope(
+            type = MessageTypes.CLIPBOARD_CHANGED,
+            payload = buildJsonObject {
+                put("text", text)
+                put("originDeviceId", identity.deviceId)
+                put("ts", System.currentTimeMillis())
+            }
+        )
+        if (sendApp(env)) {
+            if (pendingClipboard == text) pendingClipboard = null
+        } else {
+            pendingClipboard = text
+        }
+    }
+
+    private fun flushClipboard() {
+        val pending = pendingClipboard
+        if (pending != null) {
+            sendClipboard(pending)
+            return
+        }
+        clipboard.pollIfReadable()
+    }
+
+    private fun sendApp(env: Envelope): Boolean {
+        val ws = session ?: return false
+        if (!ws.isOpen()) return false
         if (useRelay) {
-            val peer = peerDeviceId ?: return
+            val peer = peerDeviceId ?: return false
             ws.sendViaRelay(peer, identity.deviceId, env)
         } else {
             ws.sendEncrypted(env)
         }
+        return true
     }
 
     fun discoveredPeers() = nsd.peers

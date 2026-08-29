@@ -99,7 +99,8 @@ final class FileTransferService: ObservableObject {
         case MessageTypes.fileOffer:
             guard isConnected?() == true else { return }
             guard let id = env.payload["transferId"]?.stringValue else { return }
-            let name = sanitize(env.payload["name"]?.stringValue ?? "file.bin")
+            let mime = env.payload["mime"]?.stringValue ?? ""
+            let name = sanitize(env.payload["name"]?.stringValue ?? "file.bin", mime: mime)
             let size = Int64(env.payload["size"]?.intValue ?? 0)
             let sha = env.payload["sha256"]?.stringValue ?? ""
             pendingIn[id] = PendingOffer(name: name, size: size, sha256: sha)
@@ -210,12 +211,35 @@ final class FileTransferService: ObservableObject {
         return dir
     }
 
-    private func sanitize(_ name: String) -> String {
+    private func sanitize(_ name: String, mime: String = "") -> String {
         let base = (name as NSString).lastPathComponent
-        let cleaned = base.replacingOccurrences(of: "/", with: "_")
+        var cleaned = base.replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: "\\", with: "_")
-        if cleaned.isEmpty || cleaned == "." || cleaned == ".." { return "file.bin" }
+        if cleaned.isEmpty || cleaned == "." || cleaned == ".." { cleaned = "file.bin" }
+        if (cleaned as NSString).pathExtension.isEmpty, let ext = Self.extension(forMime: mime) {
+            return "\(cleaned).\(ext)"
+        }
         return cleaned
+    }
+
+    private static func `extension`(forMime mime: String) -> String? {
+        let type = mime.split(separator: ";").first?.trimmingCharacters(in: .whitespaces).lowercased() ?? ""
+        switch type {
+        case "image/jpeg", "image/jpg": return "jpg"
+        case "image/png": return "png"
+        case "image/gif": return "gif"
+        case "image/webp": return "webp"
+        case "image/heic": return "heic"
+        case "image/heif": return "heif"
+        case "image/avif": return "avif"
+        case "image/bmp": return "bmp"
+        case "video/mp4": return "mp4"
+        case "video/quicktime": return "mov"
+        case "audio/mpeg": return "mp3"
+        case "text/plain": return "txt"
+        case "application/pdf": return "pdf"
+        default: return nil
+        }
     }
 
     private func upsert(_ p: TransferProgress) {
