@@ -20,6 +20,7 @@ class ClipboardCaptureActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE)
+        window.setLayout(1, 1)
         main.postDelayed({ finishCapture(null) }, 800)
     }
 

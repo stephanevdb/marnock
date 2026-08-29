@@ -64,6 +64,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -76,9 +77,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.marnock.app.BuildConfig
+import com.marnock.app.clipboard.ClipboardAccessibilityService
 import com.marnock.app.MarnockApp
 import com.marnock.app.discovery.DiscoveredPeer
 import com.marnock.app.sync.ConnectionPath
@@ -106,6 +111,18 @@ fun HomeScreen(app: MarnockApp) {
     val peers by app.agent.discoveredPeers().collectAsState()
     val transfers by app.agent.transferProgress().collectAsState()
     val findRinging by app.agent.findRinging.collectAsState()
+    var clipboardA11yTick by remember { mutableStateOf(0) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) clipboardA11yTick++
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    val clipboardA11yOn = remember(clipboardA11yTick) {
+        ClipboardAccessibilityService.isEnabled(context)
+    }
     var wifiPermTick by remember { mutableStateOf(0) }
     val wifiPermLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -366,13 +383,31 @@ fun HomeScreen(app: MarnockApp) {
                         SettingToggle(
                             headline = "Clipboard",
                             supporting = if (lastClip.isBlank()) {
-                                "Mirror text with Mac. Background copies may need a one-tap “Send clipboard” notification"
+                                if (clipboardA11yOn) {
+                                    "Mirror text with Mac. Copies sync in the background"
+                                } else {
+                                    "Mirror text with Mac. Enable clipboard access below for instant phone→Mac copies"
+                                }
                             } else {
                                 "Last: ${lastClip.take(48)}${if (lastClip.length > 48) "…" else ""}"
                             },
                             icon = Icons.Outlined.ContentCopy,
                             checked = clipboardOn,
                             onCheckedChange = { scope.launch { app.settings.setClipboardEnabled(it) } }
+                        )
+                        HorizontalDivider()
+                        AccessRow(
+                            headline = "Clipboard access",
+                            supporting = if (clipboardA11yOn) {
+                                "On — copies on this phone go to the Mac instantly"
+                            } else {
+                                "Required for instant phone→Mac copies; otherwise tap the send notification"
+                            },
+                            icon = Icons.Outlined.ContentCopy,
+                            actionLabel = if (clipboardA11yOn) "Granted" else "Open",
+                            onClick = {
+                                context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                            }
                         )
                         HorizontalDivider()
                         AccessRow(

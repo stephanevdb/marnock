@@ -4,4 +4,5 @@
     <string name="sync_channel_name">Sync service</string>
     <string name="sync_notification_title">Marnock</string>
     <string name="sync_notification_text">Keeping Mac in sync</string>
+    <string name="clipboard_accessibility_description">Lets Marnock send text you copy on this phone to your Mac. It does not read the screen or type for you.</string>
 </resources>

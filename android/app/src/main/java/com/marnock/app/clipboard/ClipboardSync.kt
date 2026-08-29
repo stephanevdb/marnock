@@ -103,13 +103,12 @@ class ClipboardSync(private val context: Context) {
     private fun requestBackgroundCapture() {
         val gen = ++captureGeneration
         awaitingCapture = true
-        val started = ClipboardCaptureActivity.start(context.applicationContext)
+        val started = ClipboardAccessibilityService.startCapture()
         if (!started) {
             awaitingCapture = false
             offerCaptureNotification()
             return
         }
-        // BAL often fails silently (no exception) — fall back if we never emitted.
         main.postDelayed({
             if (awaitingCapture && captureGeneration == gen) {
                 awaitingCapture = false
