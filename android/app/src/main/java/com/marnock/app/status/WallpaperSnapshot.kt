@@ -4,7 +4,6 @@ import android.app.WallpaperManager
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
-import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.util.Base64
 import com.marnock.app.protocol.Envelope
@@ -42,7 +41,7 @@ class WallpaperSnapshot(private val context: Context) {
 
     fun currentId(): Int = try {
         WallpaperManager.getInstance(context).getWallpaperId(WallpaperManager.FLAG_SYSTEM)
-    } catch (_: Exception) {
+    } catch (_: Throwable) {
         0
     }
 
@@ -52,51 +51,43 @@ class WallpaperSnapshot(private val context: Context) {
         return try {
             val wm = WallpaperManager.getInstance(context)
             @Suppress("DEPRECATION")
-            val drawable = wm.peekDrawable() ?: wm.drawable ?: return null
-            val src = drawableToBitmap(drawable) ?: return null
-            val tile = cropToTile(src, TILE_WIDTH, TILE_HEIGHT)
-            if (src !== tile && src !== (drawable as? BitmapDrawable)?.bitmap) {
-                src.recycle()
-            }
+            val drawable = wm.peekDrawable() ?: return null
+            val tile = renderTile(drawable) ?: return null
             val baos = ByteArrayOutputStream()
-            tile.compress(Bitmap.CompressFormat.JPEG, 70, baos)
-            if (tile !== (drawable as? BitmapDrawable)?.bitmap) {
-                tile.recycle()
-            }
+            val ok = tile.compress(Bitmap.CompressFormat.JPEG, 70, baos)
+            tile.recycle()
+            if (!ok) return null
             val bytes = baos.toByteArray()
             if (bytes.isEmpty()) return null
-            val wmId = wm.getWallpaperId(WallpaperManager.FLAG_SYSTEM)
+            val wmId = try {
+                wm.getWallpaperId(WallpaperManager.FLAG_SYSTEM)
+            } catch (_: Throwable) {
+                0
+            }
             val id = if (wmId > 0) wmId else bytes.contentHashCode()
             Snap(id, Base64.encodeToString(bytes, Base64.NO_WRAP))
-        } catch (_: Exception) {
+        } catch (_: Throwable) {
             null
         }
     }
 
-    private fun drawableToBitmap(drawable: Drawable): Bitmap? {
-        if (drawable is BitmapDrawable && drawable.bitmap != null && !drawable.bitmap.isRecycled) {
-            return drawable.bitmap
-        }
-        val w = drawable.intrinsicWidth.coerceAtLeast(1)
-        val h = drawable.intrinsicHeight.coerceAtLeast(1)
-        val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
-        drawable.setBounds(0, 0, canvas.width, canvas.height)
+    /**
+     * Draw into a tiny software bitmap. Never copy the wallpaper Bitmap: it is often
+     * HARDWARE-config and Bitmap.createBitmap(src, …) aborts the process.
+     */
+    private fun renderTile(drawable: Drawable): Bitmap? {
+        val tile = Bitmap.createBitmap(TILE_WIDTH, TILE_HEIGHT, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(tile)
+        val dw = drawable.intrinsicWidth.takeIf { it > 0 } ?: TILE_WIDTH
+        val dh = drawable.intrinsicHeight.takeIf { it > 0 } ?: TILE_HEIGHT
+        val scale = max(TILE_WIDTH.toFloat() / dw, TILE_HEIGHT.toFloat() / dh)
+        val sw = (dw * scale).toInt().coerceAtLeast(1)
+        val sh = (dh * scale).toInt().coerceAtLeast(1)
+        val left = (TILE_WIDTH - sw) / 2
+        val top = (TILE_HEIGHT - sh) / 2
+        drawable.setBounds(left, top, left + sw, top + sh)
         drawable.draw(canvas)
-        return bitmap
-    }
-
-    private fun cropToTile(src: Bitmap, tw: Int, th: Int): Bitmap {
-        val scale = max(tw.toFloat() / src.width, th.toFloat() / src.height)
-        val sw = (tw / scale).toInt().coerceAtLeast(1).coerceAtMost(src.width)
-        val sh = (th / scale).toInt().coerceAtLeast(1).coerceAtMost(src.height)
-        val x = ((src.width - sw) / 2).coerceAtLeast(0)
-        val y = ((src.height - sh) / 2).coerceAtLeast(0)
-        val cropped = Bitmap.createBitmap(src, x, y, sw, sh)
-        if (cropped.width == tw && cropped.height == th) return cropped
-        val scaled = Bitmap.createScaledBitmap(cropped, tw, th, true)
-        if (cropped !== src && cropped !== scaled) cropped.recycle()
-        return scaled
+        return tile
     }
 
     companion object {

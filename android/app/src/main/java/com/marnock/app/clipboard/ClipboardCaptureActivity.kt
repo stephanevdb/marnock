@@ -101,14 +101,17 @@ class ClipboardCaptureActivity : Activity() {
             val app = context.applicationContext
             val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             val launch = launchIntent(app)
-            return if (Build.VERSION.SDK_INT >= 34) {
-                val options = ActivityOptions.makeBasic().setPendingIntentBackgroundActivityStartMode(
-                    ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
-                )
-                PendingIntent.getActivity(app, requestCode, launch, flags, options.toBundle())
-            } else {
-                PendingIntent.getActivity(app, requestCode, launch, flags)
+            if (Build.VERSION.SDK_INT >= 34) {
+                try {
+                    val options = ActivityOptions.makeBasic().setPendingIntentBackgroundActivityStartMode(
+                        ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+                    )
+                    return PendingIntent.getActivity(app, requestCode, launch, flags, options.toBundle())
+                } catch (_: Throwable) {
+                    // Fall through — a bad ActivityOptions must not crash the foreground service.
+                }
             }
+            return PendingIntent.getActivity(app, requestCode, launch, flags)
         }
 
         /** @return false if [startActivity] threw (BAL / security). BAL may also fail silently. */
@@ -124,7 +127,7 @@ class ClipboardCaptureActivity : Activity() {
                     context.startActivity(i)
                 }
                 true
-            } catch (_: Exception) {
+            } catch (_: Throwable) {
                 false
             }
         }

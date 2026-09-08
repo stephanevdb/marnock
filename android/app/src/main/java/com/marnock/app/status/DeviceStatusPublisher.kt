@@ -44,10 +44,14 @@ class DeviceStatusPublisher(
     }
 
     private suspend fun publish(forceWallpaper: Boolean) = mutex.withLock {
-        send(snapshot())
-        if (forceWallpaper) wallpaper.invalidate()
-        val env = withContext(Dispatchers.IO) { wallpaper.pendingEnvelope() } ?: return@withLock
-        if (send(env)) wallpaper.markSent()
+        try {
+            send(snapshot())
+            if (forceWallpaper) wallpaper.invalidate()
+            val env = withContext(Dispatchers.IO) { wallpaper.pendingEnvelope() } ?: return@withLock
+            if (send(env)) wallpaper.markSent()
+        } catch (_: Throwable) {
+            // Wallpaper / battery reads must never take down the process.
+        }
     }
 
     fun snapshot(): Envelope {

@@ -71,19 +71,24 @@ class SyncForegroundService : Service() {
             Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE
         )
-        val sendClip = NotificationCompat.Action.Builder(
-            R.drawable.ic_launcher_foreground,
-            getString(R.string.send_clipboard),
-            ClipboardCaptureActivity.pendingIntent(this, SEND_CLIP_REQ)
-        ).build()
-        return NotificationCompat.Builder(this, CHANNEL)
+        val builder = NotificationCompat.Builder(this, CHANNEL)
             .setContentTitle(getString(R.string.sync_notification_title))
             .setContentText(text)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentIntent(pi)
-            .addAction(sendClip)
             .setOngoing(true)
-            .build()
+        try {
+            builder.addAction(
+                NotificationCompat.Action.Builder(
+                    R.drawable.ic_launcher_foreground,
+                    getString(R.string.send_clipboard),
+                    ClipboardCaptureActivity.pendingIntent(this, SEND_CLIP_REQ)
+                ).build()
+            )
+        } catch (_: Throwable) {
+            // Notification action is optional; a failure must not prevent startForeground.
+        }
+        return builder.build()
     }
 
     companion object {
