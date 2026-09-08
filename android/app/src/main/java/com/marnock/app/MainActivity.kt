@@ -17,13 +17,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
+import androidx.lifecycle.lifecycleScope
 import com.marnock.app.sync.SyncForegroundService
 import com.marnock.app.ui.HomeScreen
 import com.marnock.app.ui.theme.MarnockTheme
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
+    private var clipboardPollJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -54,7 +60,20 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        (application as MarnockApp).agent.pollClipboard()
+        val app = application as MarnockApp
+        clipboardPollJob?.cancel()
+        clipboardPollJob = lifecycleScope.launch {
+            while (isActive) {
+                app.agent.pollClipboard()
+                delay(500)
+            }
+        }
+    }
+
+    override fun onPause() {
+        clipboardPollJob?.cancel()
+        clipboardPollJob = null
+        super.onPause()
     }
 
     private fun requestRuntimePermissions() {

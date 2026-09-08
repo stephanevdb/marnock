@@ -37,6 +37,7 @@ public enum MessageTypes {
     public static let findRing = "find.ring"
     public static let findStop = "find.stop"
     public static let deviceStatus = "device.status"
+    public static let deviceWallpaper = "device.wallpaper"
     public static let linkOpen = "link.open"
     public static let wifiInfo = "wifi.info"
     public static let wifiRequest = "wifi.request"

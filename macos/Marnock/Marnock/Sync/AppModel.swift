@@ -70,7 +70,22 @@ final class AppModel: ObservableObject {
         }
     }
     @Published var localOnly: Bool = true {
-        didSet { UserDefaults.standard.set(localOnly, forKey: "localOnly") }
+        didSet {
+            UserDefaults.standard.set(localOnly, forKey: "localOnly")
+            if localOnly {
+                relayRetryTask?.cancel()
+                relayRetryTask = nil
+                if path == .relay {
+                    useRelay = false
+                    relayClient.close()
+                    path = .offline
+                    status = "Local-only"
+                }
+            } else if path == .offline {
+                resetRelayBackoff()
+                considerRelayFallback()
+            }
+        }
     }
     @Published var relayURL: String = UserDefaults.standard.string(forKey: "relayURL") ?? "wss://marnock.stephanevdb.com/ws" {
         didSet { UserDefaults.standard.set(relayURL, forKey: "relayURL") }
@@ -83,6 +98,8 @@ final class AppModel: ObservableObject {
     @Published var callHistory: [CallHistoryEntry] = []
     @Published var callState = CallStateInfo()
     @Published var pairedPeerId: String?
+    @Published var peerDisplayName: String = UserDefaults.standard.string(forKey: "peerDisplayName") ?? ""
+    @Published var wallpaperThumb: NSImage? = AppModel.cachedWallpaperImage()
     @Published var deviceId: String = ""
     @Published var deviceStatus = DeviceStatusInfo()
     @Published var mediaState = MediaStateInfo()
@@ -123,6 +140,9 @@ final class AppModel: ObservableObject {
     var featureCancellables = Set<AnyCancellable>()
     private var encoder: JSONEncoder { JSONEncoder() }
     private var decoder: JSONDecoder { JSONDecoder() }
+    private var relayBackoffNs: UInt64 = 2_000_000_000
+    private var relayRetryTask: Task<Void, Never>?
+    private var wakeObserver: NSObjectProtocol?
 
     func start() {
         clipboardEnabled = UserDefaults.standard.bool(forKey: "clipboardEnabled")
@@ -165,6 +185,8 @@ final class AppModel: ObservableObject {
             Task { @MainActor in
                 guard let self else { return }
                 // LAN wins: drop any in-flight/open relay so a late onOpen cannot flip UI back.
+                self.relayRetryTask?.cancel()
+                self.relayRetryTask = nil
                 self.useRelay = false
                 self.path = .lan
                 self.status = "Phone connected over LAN"
@@ -210,6 +232,20 @@ final class AppModel: ObservableObject {
 
         if sessionReady {
             considerRelayFallback()
+        }
+
+        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                self.resetRelayBackoff()
+                if self.path == .offline {
+                    self.considerRelayFallback()
+                }
+            }
         }
 
         quietMonitor.$screenLocked
@@ -265,7 +301,29 @@ final class AppModel: ObservableObject {
 
     private func considerRelayFallback() {
         guard !localOnly, path == .offline, sessionReady else { return }
+        relayRetryTask?.cancel()
+        relayRetryTask = nil
         connectRelay()
+    }
+
+    private func resetRelayBackoff() {
+        relayBackoffNs = 2_000_000_000
+    }
+
+    private func scheduleRelayRetry() {
+        relayRetryTask?.cancel()
+        guard !localOnly, sessionReady, path == .offline else { return }
+        let delay = relayBackoffNs
+        relayBackoffNs = min(delay * 2, 30_000_000_000)
+        relayRetryTask = Task { @MainActor in
+            do {
+                try await Task.sleep(nanoseconds: delay)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
+            self.considerRelayFallback()
+        }
     }
 
     private func connectRelay() {
@@ -278,6 +336,7 @@ final class AppModel: ObservableObject {
                 guard let self, let key = self.crypto.sessionKeyData() else { return }
                 // Ignore late opens if LAN reclaimed the link (or relay was abandoned).
                 guard self.useRelay, self.path != .lan else { return }
+                self.resetRelayBackoff()
                 self.path = .relay
                 self.status = "Connected (Relay)"
                 self.sendPlain(Envelope(type: MessageTypes.relayRegister, payload: [
@@ -290,10 +349,11 @@ final class AppModel: ObservableObject {
         }
         relayClient.onClose = { [weak self] in
             Task { @MainActor in
-                if self?.useRelay == true {
-                    self?.path = .offline
-                    self?.status = "Relay disconnected"
-                }
+                guard let self else { return }
+                guard self.useRelay, self.path != .lan else { return }
+                self.path = .offline
+                self.status = "Relay disconnected"
+                self.scheduleRelayRetry()
             }
         }
         relayClient.onMessage = { [weak self] data in
@@ -477,6 +537,7 @@ final class AppModel: ObservableObject {
         do {
             try crypto.deriveSession(peerPublicKeyB64: peerPub)
             pairedPeerId = peerId
+            applyPeerDisplayName(env.payload["displayName"]?.stringValue)
             if let key = crypto.sessionKeyData() {
                 UserDefaults.standard.set(peerId, forKey: "peerDeviceId")
                 KeychainStore.set(key.base64EncodedString(), account: .pairingSessionKey)
@@ -710,14 +771,48 @@ final class AppModel: ObservableObject {
         sendApp(Envelope(type: MessageTypes.notificationAction, payload: payload))
     }
 
+    func applyPeerDisplayName(_ name: String?) {
+        let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmed.isEmpty else { return }
+        peerDisplayName = trimmed
+        UserDefaults.standard.set(trimmed, forKey: "peerDisplayName")
+    }
+
+    func applyWallpaperThumb(base64: String?) {
+        guard let base64, !base64.isEmpty,
+              let data = Data(base64Encoded: base64),
+              let image = NSImage(data: data) else { return }
+        wallpaperThumb = image
+        UserDefaults.standard.set(base64, forKey: "peerWallpaperThumb")
+    }
+
+    static func cachedWallpaperImage() -> NSImage? {
+        guard let b64 = UserDefaults.standard.string(forKey: "peerWallpaperThumb"),
+              let data = Data(base64Encoded: b64) else { return nil }
+        return NSImage(data: data)
+    }
+
+    var phoneDisplayName: String {
+        if !peerDisplayName.isEmpty { return peerDisplayName }
+        return "Phone"
+    }
+
     func clearPairing() {
         UserDefaults.standard.removeObject(forKey: "peerDeviceId")
         UserDefaults.standard.removeObject(forKey: "sessionKey")
         UserDefaults.standard.removeObject(forKey: "peerPub")
+        UserDefaults.standard.removeObject(forKey: "peerDisplayName")
+        UserDefaults.standard.removeObject(forKey: "peerWallpaperThumb")
         KeychainStore.delete(.pairingSessionKey)
         KeychainStore.delete(.pairingPeerPub)
         pairedPeerId = nil
+        peerDisplayName = ""
+        wallpaperThumb = nil
         sessionReady = false
+        relayRetryTask?.cancel()
+        relayRetryTask = nil
+        useRelay = false
+        relayClient.close()
         pairingCode = String(format: "%06d", Int.random(in: 0...999999))
         refreshQR()
         status = "Pairing cleared"

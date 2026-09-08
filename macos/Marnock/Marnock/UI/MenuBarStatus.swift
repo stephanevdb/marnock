@@ -7,31 +7,49 @@ struct MenuBarStatus: View {
     @EnvironmentObject var navigation: NavigationState
     @Environment(\.openWindow) private var openWindow
     @State private var replyDrafts: [String: String] = [:]
+    @State private var hostingWindow: NSWindow?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            header
+        VStack(alignment: .leading, spacing: 10) {
+            DeviceStatusHeader(
+                deviceName: model.phoneDisplayName,
+                path: model.path,
+                battery: model.deviceStatus.battery,
+                charging: model.deviceStatus.charging,
+                wallpaper: model.wallpaperThumb,
+                onClose: closePanel
+            )
 
             if model.callState.state == "ringing" {
                 incomingCall
-                Divider()
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .liquidGlassCard()
             }
 
             if !model.mediaState.title.isEmpty {
                 nowPlaying
-                Divider()
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .liquidGlassCard()
             }
 
             recentNotifications
-            Divider()
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .liquidGlassCard()
 
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 8) {
                 Toggle("Clipboard sync", isOn: $model.clipboardEnabled)
                 Toggle("Quiet hours", isOn: $model.quietHoursEnabled)
             }
+            .toggleStyle(.switch)
+            .controlSize(.small)
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .liquidGlassCard()
 
             if let update = updates.available, !updates.dismissed {
-                Divider()
                 HStack {
                     Text("Update v\(update.version)")
                         .font(.caption)
@@ -41,52 +59,64 @@ struct MenuBarStatus: View {
                     Button("Later") { updates.dismissed = true }
                         .buttonStyle(.borderless)
                 }
+                .padding(12)
+                .liquidGlassCard()
             }
 
-            Divider()
-
-            HStack {
-                Button("Find phone") { model.findPhone() }
-                Button("Stop") { model.stopFindPhone() }
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Button("Find phone") { model.findPhone() }
+                    Button("Stop") { model.stopFindPhone() }
+                    Spacer()
+                }
+                Button("Open Marnock…") {
+                    openMainWindow(section: nil)
+                }
+                .keyboardShortcut("o")
+                Button(updates.checking ? "Checking…" : "Check for updates") {
+                    Task { await updates.check(notify: false) }
+                }
+                .disabled(updates.checking)
             }
+            .controlSize(.small)
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .liquidGlassCard()
 
-            Button("Open Marnock…") {
-                openMainWindow(section: nil)
-            }
-            .keyboardShortcut("o")
-
-            Button(updates.checking ? "Checking…" : "Check for updates") {
-                Task { await updates.check(notify: false) }
-            }
-            .disabled(updates.checking)
-
-            Divider()
             Button("Quit Marnock") { NSApplication.shared.terminate(nil) }
+                .buttonStyle(.plain)
+                .foregroundStyle(.white.opacity(0.55))
+                .font(.caption)
                 .keyboardShortcut("q")
+                .frame(maxWidth: .infinity)
         }
-        .padding(14)
-        .frame(width: 320)
-    }
-
-    private var header: some View {
-        HStack(alignment: .center, spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Marnock")
-                    .font(.headline)
-                Text(model.status)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-            }
-            Spacer()
-            ConnectionStatusBadge(path: model.path)
-            if model.deviceStatus.battery >= 0 {
-                Label(
-                    "\(model.deviceStatus.battery)%",
-                    systemImage: model.deviceStatus.charging ? "battery.100.bolt" : "battery.100"
+        .padding(12)
+        .frame(width: 340)
+        .environment(\.colorScheme, .dark)
+        .background {
+            ZStack {
+                VisualEffectView(material: .hudWindow, blendingMode: .behindWindow)
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.10),
+                        Color.clear,
+                        Color.black.opacity(0.18)
+                    ],
+                    startPoint: .topTrailing,
+                    endPoint: .bottomLeading
                 )
-                .font(.caption.weight(.medium))
-                .labelStyle(.titleAndIcon)
+                .allowsHitTesting(false)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: MenuBarGlassChrome.cornerRadius, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: MenuBarGlassChrome.cornerRadius, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.14), lineWidth: 0.75)
+        }
+        .background {
+            MenuBarWindowAccessor { window in
+                hostingWindow = window
+                MenuBarGlassChrome.apply(window)
             }
         }
     }
@@ -106,9 +136,6 @@ struct MenuBarStatus: View {
                 Button("Reject", role: .destructive) { model.rejectCall() }
             }
         }
-        .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
     }
 
     private var nowPlaying: some View {
@@ -202,6 +229,10 @@ struct MenuBarStatus: View {
                 }
             }
         }
+    }
+
+    private func closePanel() {
+        hostingWindow?.orderOut(nil)
     }
 
     private func openMainWindow(section: SidebarSection?) {

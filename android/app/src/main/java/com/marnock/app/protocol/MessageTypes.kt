@@ -39,6 +39,7 @@ object MessageTypes {
     const val FIND_RING = "find.ring"
     const val FIND_STOP = "find.stop"
     const val DEVICE_STATUS = "device.status"
+    const val DEVICE_WALLPAPER = "device.wallpaper"
 
     // Links / wifi / photos / prefs
     const val LINK_OPEN = "link.open"

@@ -6,14 +6,17 @@ import android.content.IntentFilter
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.BatteryManager
-import android.os.Build
 import com.marnock.app.protocol.Envelope
 import com.marnock.app.protocol.MessageTypes
 import com.marnock.app.wifi.WifiInfoProvider
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
@@ -21,15 +24,30 @@ class DeviceStatusPublisher(
     private val context: Context,
     private val scope: CoroutineScope,
     private val wifi: WifiInfoProvider,
-    private val send: (Envelope) -> Unit
+    private val displayName: () -> String,
+    private val send: (Envelope) -> Boolean
 ) {
+    private val wallpaper = WallpaperSnapshot(context)
+    private val mutex = Mutex()
+
     fun start() {
         scope.launch {
             while (isActive) {
-                send(snapshot())
+                publish(forceWallpaper = false)
                 delay(15_000)
             }
         }
+    }
+
+    fun publishNow() {
+        scope.launch { publish(forceWallpaper = true) }
+    }
+
+    private suspend fun publish(forceWallpaper: Boolean) = mutex.withLock {
+        send(snapshot())
+        if (forceWallpaper) wallpaper.invalidate()
+        val env = withContext(Dispatchers.IO) { wallpaper.pendingEnvelope() } ?: return@withLock
+        if (send(env)) wallpaper.markSent()
     }
 
     fun snapshot(): Envelope {
@@ -44,6 +62,8 @@ class DeviceStatusPublisher(
         val cell = caps?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) == true
         val ssid = if (wifiUp) wifi.currentSsid() else ""
         val hotspot = wifi.isHotspotActive()
+        val name = displayName()
+        val wallpaperId = wallpaper.currentId()
 
         return Envelope(
             MessageTypes.DEVICE_STATUS,
@@ -53,6 +73,8 @@ class DeviceStatusPublisher(
                 put("wifiSsid", ssid)
                 put("cellular", cell)
                 put("hotspotActive", hotspot)
+                put("displayName", name)
+                put("wallpaperId", wallpaperId)
             }
         )
     }

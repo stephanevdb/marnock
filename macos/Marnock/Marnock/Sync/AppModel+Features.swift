@@ -8,6 +8,8 @@ struct DeviceStatusInfo: Equatable {
     var wifiSsid: String = ""
     var cellular: Bool = false
     var hotspotActive: Bool = false
+    var displayName: String = ""
+    var wallpaperId: Int = 0
 }
 
 struct MediaStateInfo: Equatable {
@@ -139,8 +141,14 @@ extension AppModel {
                 charging: env.payload["charging"]?.boolValue ?? false,
                 wifiSsid: env.payload["wifiSsid"]?.stringValue ?? "",
                 cellular: env.payload["cellular"]?.boolValue ?? false,
-                hotspotActive: env.payload["hotspotActive"]?.boolValue ?? false
+                hotspotActive: env.payload["hotspotActive"]?.boolValue ?? false,
+                displayName: env.payload["displayName"]?.stringValue ?? "",
+                wallpaperId: env.payload["wallpaperId"]?.intValue ?? 0
             )
+            applyPeerDisplayName(env.payload["displayName"]?.stringValue)
+            return true
+        case MessageTypes.deviceWallpaper:
+            applyWallpaperThumb(base64: env.payload["thumb"]?.stringValue)
             return true
         case MessageTypes.mediaState:
             mediaState = MediaStateInfo(

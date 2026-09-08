@@ -5,4 +5,6 @@
     <string name="sync_notification_title">Marnock</string>
     <string name="sync_notification_text">Keeping Mac in sync</string>
     <string name="clipboard_accessibility_description">Lets Marnock send text you copy on this phone to your Mac. It does not read the screen or type for you.</string>
+    <string name="send_clipboard">Send clipboard</string>
+    <string name="send_clipboard_tile">Send clipboard</string>
 </resources>

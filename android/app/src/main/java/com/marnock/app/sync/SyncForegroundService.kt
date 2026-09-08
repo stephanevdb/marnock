@@ -11,6 +11,7 @@ import androidx.core.app.NotificationCompat
 import com.marnock.app.MarnockApp
 import com.marnock.app.MainActivity
 import com.marnock.app.R
+import com.marnock.app.clipboard.ClipboardCaptureActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -70,11 +71,17 @@ class SyncForegroundService : Service() {
             Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE
         )
+        val sendClip = NotificationCompat.Action.Builder(
+            R.drawable.ic_launcher_foreground,
+            getString(R.string.send_clipboard),
+            ClipboardCaptureActivity.pendingIntent(this, SEND_CLIP_REQ)
+        ).build()
         return NotificationCompat.Builder(this, CHANNEL)
             .setContentTitle(getString(R.string.sync_notification_title))
             .setContentText(text)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentIntent(pi)
+            .addAction(sendClip)
             .setOngoing(true)
             .build()
     }
@@ -82,6 +89,7 @@ class SyncForegroundService : Service() {
     companion object {
         private const val CHANNEL = "sync"
         private const val NOTIF_ID = 42
+        private const val SEND_CLIP_REQ = 43
 
         fun start(context: android.content.Context) {
             val i = Intent(context, SyncForegroundService::class.java)

@@ -3,6 +3,10 @@ package com.marnock.app.sync
 import android.content.Context
 import android.util.Log
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.net.Uri
 import com.marnock.app.calls.CallController
 import com.marnock.app.clipboard.ClipboardSync
@@ -24,12 +28,14 @@ import com.marnock.app.transport.WebSocketSession
 import com.marnock.app.wifi.WifiInfoProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -76,7 +82,9 @@ class SyncAgent(
     private var started = false
     private var currentUrl: String? = null
     private var connecting = false
-    private var backoffMs = 2_000L
+    private var backoffMs = BACKOFF_MIN_MS
+    private val retrySignal = Channel<Unit>(Channel.CONFLATED)
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private var pendingPairing: PendingPairing? = null
     private var pairingAttempt = 0
     private var pendingClipboard: String? = null
@@ -91,7 +99,14 @@ class SyncAgent(
         if (started) return
         started = true
         files = FileTransferManager(context, scope) { sendApp(it) }
-        deviceStatus = DeviceStatusPublisher(context, scope, wifi) { sendApp(it) }
+        deviceStatus = DeviceStatusPublisher(
+            context,
+            scope,
+            wifi,
+            displayName = {
+                if (::identity.isInitialized) identity.displayName else android.os.Build.MODEL
+            }
+        ) { sendApp(it) }
         scope.launch {
             identity = settings.ensureIdentity()
             crypto = CryptoEngine.fromStored(identity.privateKeyB64, identity.publicKeyB64)
@@ -100,6 +115,7 @@ class SyncAgent(
                 crypto.setSessionKey(CryptoEngine.decodeB64(p.sessionKeyB64))
             }
             nsd.start()
+            registerNetworkCallback()
             sms.startWatching()
             calls.start()
             deviceStatus.start()
@@ -129,6 +145,7 @@ class SyncAgent(
         session = null
         currentUrl = null
         connecting = false
+        unregisterNetworkCallback()
         nsd.stop()
         sms.stopWatching()
         clipboard.dispose()
@@ -200,7 +217,7 @@ class SyncAgent(
             if (paired == null) {
                 _status.value = "Not paired — scan Mac QR"
                 _path.value = ConnectionPath.Offline
-                delay(2000)
+                awaitRetry(2_000)
                 continue
             }
             peerDeviceId = paired.peerDeviceId
@@ -208,17 +225,17 @@ class SyncAgent(
 
             // Healthy session — leave it alone
             if (session?.isOpen() == true) {
-                backoffMs = 2_000L
+                backoffMs = BACKOFF_MIN_MS
                 if (_path.value == ConnectionPath.Offline) {
                     _path.value = if (useRelay) ConnectionPath.Relay else ConnectionPath.Lan
                     _status.value = if (useRelay) "Connected (Relay)" else "Connected (LAN)"
                 }
-                delay(5_000)
+                awaitRetry(5_000)
                 continue
             }
 
             if (connecting) {
-                delay(500)
+                awaitRetry(500)
                 continue
             }
 
@@ -227,33 +244,37 @@ class SyncAgent(
                 val url = "ws://${lanPeer.host}:${lanPeer.port}/"
                 _status.value = "Connecting LAN ${lanPeer.host}:${lanPeer.port}"
                 openLan(url, force = false)
-                waitForOpen(6_000)
+                waitForOpen(WAIT_OPEN_MS)
                 if (session?.isOpen() == true) {
                     useRelay = false
                     _path.value = ConnectionPath.Lan
                     _status.value = "Connected (LAN)"
-                    backoffMs = 2_000L
+                    backoffMs = BACKOFF_MIN_MS
                     continue
                 }
+                finishAttemptIfUnopened()
             }
 
             if (!settings.isLocalOnly()) {
                 _status.value = "LAN unavailable — trying relay"
                 openRelay()
-                waitForOpen(6_000)
+                waitForOpen(WAIT_OPEN_MS)
                 if (session?.isOpen() == true) {
                     useRelay = true
+                    sendRelayRegister()
                     _path.value = ConnectionPath.Relay
                     _status.value = "Connected (Relay)"
-                    backoffMs = 2_000L
+                    backoffMs = BACKOFF_MIN_MS
                     continue
                 }
+                finishAttemptIfUnopened()
             }
 
             _path.value = ConnectionPath.Offline
             _status.value = "Offline — retrying"
-            delay(backoffMs)
-            backoffMs = (backoffMs * 2).coerceAtMost(30_000L)
+            retrySignal.tryReceive()
+            awaitRetry(backoffMs)
+            backoffMs = (backoffMs * 2).coerceAtMost(BACKOFF_MAX_MS)
         }
     }
 
@@ -265,6 +286,25 @@ class SyncAgent(
         }
     }
 
+    private fun finishAttemptIfUnopened() {
+        if (session?.isOpen() == true) return
+        connecting = false
+        session?.close()
+        session = null
+        currentUrl = null
+    }
+
+    private suspend fun awaitRetry(timeoutMs: Long) {
+        withTimeoutOrNull(timeoutMs) {
+            retrySignal.receive()
+        }
+    }
+
+    private fun kickRetry(resetBackoff: Boolean) {
+        if (resetBackoff) backoffMs = BACKOFF_MIN_MS
+        retrySignal.trySend(Unit)
+    }
+
     private fun openLan(url: String, force: Boolean) {
         if (!force && session?.isOpen() == true && currentUrl == url) return
         if (!force && connecting && currentUrl == url) return
@@ -272,12 +312,13 @@ class SyncAgent(
         replaceSession(url) { it.connect(url) }
     }
 
-    private suspend fun openRelay() {
+    private fun openRelay() {
         useRelay = true
         val url = settings.relayUrl()
         replaceSession(url) { it.connect(url) }
-        delay(400)
-        if (session?.isOpen() != true) return
+    }
+
+    private fun sendRelayRegister() {
         val key = crypto.sessionKeyBytes() ?: return
         sendPlain(
             Envelope(
@@ -316,11 +357,16 @@ class SyncAgent(
                     connecting = false
                     _path.value = if (useRelay) ConnectionPath.Relay else ConnectionPath.Lan
                     _status.value = if (useRelay) "Connected (Relay)" else "Connected (LAN)"
+                    if (useRelay) sendRelayRegister()
                     flushClipboard()
-                } else if (!connecting) {
+                    if (::deviceStatus.isInitialized) deviceStatus.publishNow()
+                } else {
+                    connecting = false
+                    val wasUp = _path.value != ConnectionPath.Offline
                     _path.value = ConnectionPath.Offline
-                    if (_status.value.startsWith("Connected")) {
+                    if (wasUp) {
                         _status.value = "Disconnected — reconnecting"
+                        kickRetry(resetBackoff = false)
                     }
                 }
             }
@@ -375,6 +421,15 @@ class SyncAgent(
             sms.changes.collectLatest {
                 delay(250)
                 pushSmsThreads()
+            }
+        }
+        jobs += scope.launch {
+            nsd.peers.collect { peers ->
+                val pairedId = peerDeviceId ?: return@collect
+                if (session?.isOpen() == true) return@collect
+                if (peers.any { it.deviceId == pairedId }) {
+                    kickRetry(resetBackoff = true)
+                }
             }
         }
     }
@@ -594,7 +649,32 @@ class SyncAgent(
         return scheme == "http" || scheme == "https"
     }
 
+    private fun registerNetworkCallback() {
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val cb = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                if (session?.isOpen() == true) return
+                kickRetry(resetBackoff = true)
+            }
+        }
+        val request = NetworkRequest.Builder()
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+            .build()
+        runCatching { cm.registerNetworkCallback(request, cb) }
+        networkCallback = cb
+    }
+
+    private fun unregisterNetworkCallback() {
+        val cb = networkCallback ?: return
+        networkCallback = null
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        runCatching { cm.unregisterNetworkCallback(cb) }
+    }
+
     companion object {
         private const val TAG = "SyncAgent"
+        private const val WAIT_OPEN_MS = 8_000L
+        private const val BACKOFF_MIN_MS = 2_000L
+        private const val BACKOFF_MAX_MS = 30_000L
     }
 }

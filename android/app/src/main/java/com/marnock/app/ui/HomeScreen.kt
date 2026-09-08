@@ -399,9 +399,9 @@ fun HomeScreen(app: MarnockApp) {
                         AccessRow(
                             headline = "Clipboard access",
                             supporting = if (clipboardA11yOn) {
-                                "On — copies on this phone go to the Mac instantly"
+                                "On — copies sync in the background. Add Send clipboard in Quick Settings, or use the sync notification action"
                             } else {
-                                "Required for instant phone→Mac copies; otherwise tap the send notification"
+                                "Required for instant phone→Mac copies. Otherwise use Send clipboard on the sync notification or Quick Settings tile"
                             },
                             icon = Icons.Outlined.ContentCopy,
                             actionLabel = if (clipboardA11yOn) "Granted" else "Open",

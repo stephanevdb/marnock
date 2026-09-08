@@ -32,6 +32,7 @@ class WebSocketSession(
     private val json: Json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 ) {
     private val client = OkHttpClient.Builder()
+        .connectTimeout(8, TimeUnit.SECONDS)
         .pingInterval(20, TimeUnit.SECONDS)
         .readTimeout(0, TimeUnit.MILLISECONDS)
         .build()
@@ -51,7 +52,12 @@ class WebSocketSession(
     val connectionState: SharedFlow<Boolean> = _connectionState
 
     fun connect(url: String) {
-        close()
+        // Do not emit connectionState=false here — a fresh connect is not a disconnect,
+        // and that emit used to leave SyncAgent.connecting stuck true on failure.
+        resetIngest()
+        socket?.cancel()
+        socket = null
+        open.set(false)
         val ch = Channel<ByteArray>(capacity = 1024)
         ingest = ch
         ingestJob = scope.launch(Dispatchers.Default) {
@@ -183,13 +189,17 @@ class WebSocketSession(
     fun isOpen(): Boolean = open.get()
 
     fun close() {
-        ingestJob?.cancel()
-        ingest?.close()
-        ingest = null
-        ingestJob = null
+        resetIngest()
         socket?.close(1000, "bye")
         socket = null
         open.set(false)
         _connectionState.tryEmit(false)
+    }
+
+    private fun resetIngest() {
+        ingestJob?.cancel()
+        ingest?.close()
+        ingest = null
+        ingestJob = null
     }
 }

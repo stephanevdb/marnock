@@ -226,7 +226,17 @@
         "charging": { "type": "boolean" },
         "wifiSsid": { "type": "string" },
         "cellular": { "type": "boolean" },
-        "hotspotActive": { "type": "boolean" }
+        "hotspotActive": { "type": "boolean" },
+        "displayName": { "type": "string" },
+        "wallpaperId": { "type": "integer" }
+      }
+    },
+    "DeviceWallpaper": {
+      "type": "object",
+      "required": ["id", "thumb"],
+      "properties": {
+        "id": { "type": "integer" },
+        "thumb": { "type": "string", "description": "base64 JPEG home-wallpaper thumbnail" }
       }
     },
     "LinkOpen": {

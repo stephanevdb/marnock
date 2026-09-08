@@ -114,7 +114,7 @@ class ClipboardSync(private val context: Context) {
                 awaitingCapture = false
                 offerCaptureNotification()
             }
-        }, 800)
+        }, 2_500)
     }
 
     private fun offerCaptureNotification() {
