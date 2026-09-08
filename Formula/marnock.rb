@@ -1,8 +1,8 @@
 class Marnock < Formula
   desc "Sync clipboard, notifications, SMS, and calls between Android and Mac"
   homepage "https://github.com/stephanevdb/marnock"
-  url "https://github.com/stephanevdb/marnock/archive/refs/tags/v1.3.7.tar.gz"
-  sha256 "24ce12ccfd74a0a43c180e5237a298a0bb0cfab8c4e526bacdb3a932f0123721"
+  url "https://github.com/stephanevdb/marnock/archive/refs/tags/v1.3.8.tar.gz"
+  sha256 "8505c1bffe1750964149acae919d1f343b0c0bebbf8b4d80e36ca187dbcee2ec"
   head "https://github.com/stephanevdb/marnock.git", branch: "main"
 
   depends_on xcode: ["15.0", :build]
