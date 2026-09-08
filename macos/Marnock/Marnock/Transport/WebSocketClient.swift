@@ -98,7 +98,7 @@ final class WebSocketClient: NSObject, URLSessionWebSocketDelegate, @unchecked S
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-        guard task === self.task else { return }
+        guard let current = self.task, task === current else { return }
         if error != nil {
             emitClose()
         }

@@ -56,6 +56,12 @@ struct CallStateInfo: Equatable {
     var name: String = ""
 }
 
+private func loadCachedWallpaperThumb() -> NSImage? {
+    guard let b64 = UserDefaults.standard.string(forKey: "peerWallpaperThumb"),
+          let data = Data(base64Encoded: b64) else { return nil }
+    return NSImage(data: data)
+}
+
 @MainActor
 final class AppModel: ObservableObject {
     @Published var path: ConnectionPath = .offline
@@ -99,7 +105,7 @@ final class AppModel: ObservableObject {
     @Published var callState = CallStateInfo()
     @Published var pairedPeerId: String?
     @Published var peerDisplayName: String = UserDefaults.standard.string(forKey: "peerDisplayName") ?? ""
-    @Published var wallpaperThumb: NSImage? = AppModel.cachedWallpaperImage()
+    @Published var wallpaperThumb: NSImage? = loadCachedWallpaperThumb()
     @Published var deviceId: String = ""
     @Published var deviceStatus = DeviceStatusInfo()
     @Published var mediaState = MediaStateInfo()
@@ -314,7 +320,7 @@ final class AppModel: ObservableObject {
         relayRetryTask?.cancel()
         guard !localOnly, sessionReady, path == .offline else { return }
         let delay = relayBackoffNs
-        relayBackoffNs = min(delay * 2, 30_000_000_000)
+        relayBackoffNs = min(delay * 2, UInt64(30_000_000_000))
         relayRetryTask = Task { @MainActor in
             do {
                 try await Task.sleep(nanoseconds: delay)
@@ -784,12 +790,6 @@ final class AppModel: ObservableObject {
               let image = NSImage(data: data) else { return }
         wallpaperThumb = image
         UserDefaults.standard.set(base64, forKey: "peerWallpaperThumb")
-    }
-
-    static func cachedWallpaperImage() -> NSImage? {
-        guard let b64 = UserDefaults.standard.string(forKey: "peerWallpaperThumb"),
-              let data = Data(base64Encoded: b64) else { return nil }
-        return NSImage(data: data)
     }
 
     var phoneDisplayName: String {

@@ -26,33 +26,23 @@ struct LiquidGlassCardModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .background {
+            .background(
+                .ultraThinMaterial,
+                in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            )
+            .overlay {
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(.ultraThinMaterial)
-                    .overlay {
-                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                            .strokeBorder(
-                                LinearGradient(
-                                    colors: [
-                                        Color.white.opacity(0.28),
-                                        Color.white.opacity(0.08)
-                                    ],
-                                    startPoint: .top,
-                                    endPoint: .bottom
-                                ),
-                                lineWidth: 0.75
-                            )
-                    }
-                    .overlay(alignment: .top) {
-                        LinearGradient(
-                            colors: [Color.white.opacity(0.16), Color.clear],
-                            startPoint: .top,
-                            endPoint: .center
-                        )
-                        .frame(height: 26)
-                        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-                        .allowsHitTesting(false)
-                    }
+                    .strokeBorder(Color.white.opacity(0.18), lineWidth: 0.75)
+            }
+            .overlay(alignment: .top) {
+                LinearGradient(
+                    colors: [Color.white.opacity(0.16), Color.clear],
+                    startPoint: .top,
+                    endPoint: .center
+                )
+                .frame(height: 26)
+                .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                .allowsHitTesting(false)
             }
     }
 }
@@ -79,7 +69,6 @@ enum MenuBarGlassChrome {
             content.wantsLayer = true
             content.layer?.cornerRadius = cornerRadius
             content.layer?.masksToBounds = true
-            content.layer?.cornerCurve = .continuous
         }
     }
 }

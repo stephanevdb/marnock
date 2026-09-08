@@ -87,13 +87,15 @@ jobs:
   macos:
     name: Build macOS
     needs: version
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 
       - name: Swift build
         working-directory: macos/Marnock
-        run: swift build -c release
+        run: |
+          swift --version
+          swift build -c release
 
       - name: Package .app
         working-directory: macos/Marnock

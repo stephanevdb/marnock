@@ -7,7 +7,7 @@ struct MenuBarStatus: View {
     @EnvironmentObject var navigation: NavigationState
     @Environment(\.openWindow) private var openWindow
     @State private var replyDrafts: [String: String] = [:]
-    @State private var hostingWindow: NSWindow?
+    @State private var hostingWindowNumber: Int = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -115,7 +115,7 @@ struct MenuBarStatus: View {
         }
         .background {
             MenuBarWindowAccessor { window in
-                hostingWindow = window
+                hostingWindowNumber = window.windowNumber
                 MenuBarGlassChrome.apply(window)
             }
         }
@@ -232,7 +232,7 @@ struct MenuBarStatus: View {
     }
 
     private func closePanel() {
-        hostingWindow?.orderOut(nil)
+        NSApp.windows.first(where: { $0.windowNumber == hostingWindowNumber })?.orderOut(nil)
     }
 
     private func openMainWindow(section: SidebarSection?) {

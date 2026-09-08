@@ -44,7 +44,7 @@ struct DeviceStatusHeader: View {
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.85))
                     .frame(width: 28, height: 28)
-                    .background(Color.white.opacity(0.12), in: Circle())
+                    .background(Circle().fill(Color.white.opacity(0.12)))
             }
             .buttonStyle(.plain)
             .help("Close")
@@ -54,10 +54,10 @@ struct DeviceStatusHeader: View {
     @ViewBuilder
     private var wallpaperTile: some View {
         Group {
-            if let wallpaper {
+            if let wallpaper = wallpaper {
                 Image(nsImage: wallpaper)
-                    .resizable()
                     .interpolation(.high)
+                    .resizable()
                     .aspectRatio(contentMode: .fill)
             } else {
                 ZStack {

@@ -312,7 +312,7 @@ class SyncAgent(
         replaceSession(url) { it.connect(url) }
     }
 
-    private fun openRelay() {
+    private suspend fun openRelay() {
         useRelay = true
         val url = settings.relayUrl()
         replaceSession(url) { it.connect(url) }
